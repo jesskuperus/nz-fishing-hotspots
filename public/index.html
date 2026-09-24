@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#070d14" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>Tutukaka Hotspots</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%239d174d'/%3E%3C/svg%3E" />
+<!-- Leaflet is vendored so the map still opens on a boat with one bar of signal. -->
+<link rel="stylesheet" href="vendor/leaflet.css" />
+<style>
+  :root {
+    --bg: #070d14; --panel: rgba(9,18,28,.94); --edge: rgba(120,190,220,.22);
+    --ink: #e7f2f8; --dim: #8fa8b8; --accent: #38bdf8;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink);
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  #map { position: absolute; inset: 0; background: var(--bg); }
+
+  /* Top bar: just the headline number, so it reads at a glance on deck. */
+  #bar {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 600;
+    padding: calc(var(--safe-top) + 10px) 14px 10px;
+    background: linear-gradient(180deg, rgba(7,13,20,.95) 60%, transparent);
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  #bar h1 { margin: 0; font-size: 16px; letter-spacing: .01em; }
+  #bar .date { font-size: 12px; color: var(--dim); margin-left: auto; font-variant-numeric: tabular-nums; }
+  .badge { display: inline-block; padding: 1px 6px; border-radius: 99px; font-size: 10px;
+    letter-spacing: .06em; text-transform: uppercase; border: 1px solid currentColor; }
+  .badge.mock { color: #fbbf24; } .badge.live { color: #4ade80; }
+
+  /* Bottom sheet: the day's best marks, thumb-reachable. */
+  #sheet {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 600;
+    background: var(--panel); border-top: 1px solid var(--edge);
+    border-radius: 16px 16px 0 0; backdrop-filter: blur(10px);
+    padding: 0 14px calc(var(--safe-bottom) + 12px);
+    max-height: 62%; display: flex; flex-direction: column;
+    transform: translateY(calc(100% - 96px)); transition: transform .25s ease;
+  }
+  #sheet.open { transform: translateY(0); }
+  #grab { padding: 10px 0 6px; cursor: pointer; flex: none; }
+  #grab .pill { width: 38px; height: 4px; border-radius: 2px; background: var(--dim); margin: 0 auto 8px; }
+  #grab .row { display: flex; align-items: baseline; justify-content: space-between; }
+  #grab .row b { font-size: 15px; } #grab .row span { font-size: 12px; color: var(--dim); }
+  #list { overflow-y: auto; -webkit-overflow-scrolling: touch; margin: 0 -14px; padding: 0 14px 4px; }
+
+  .mark { display: flex; gap: 12px; align-items: center; padding: 11px 0;
+    border-top: 1px solid var(--edge); cursor: pointer; }
+  .mark .score { width: 46px; flex: none; text-align: center; font-weight: 700; font-size: 19px;
+    font-variant-numeric: tabular-nums; }
+  .mark .body { min-width: 0; flex: 1; }
+  .mark .co { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  .mark .sub { font-size: 12px; color: var(--dim); margin-top: 1px; }
+  .mark .front { color: #67e8f9; }
+  .mark a.nav { flex: none; font-size: 12px; color: var(--accent); text-decoration: none;
+    border: 1px solid var(--edge); border-radius: 8px; padding: 7px 10px; }
+
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--panel); color: var(--ink);
+    border: 1px solid var(--edge); }
+  .leaflet-popup-content { margin: 12px 14px; width: 216px !important; font-size: 14px; }
+  .leaflet-control-attribution { font-size: 9px; }
+  .pv { display: flex; justify-content: space-between; gap: 10px; }
+  .pv + .pv { margin-top: 3px; } .pv span:first-child { color: var(--dim); }
+  .big { font-size: 27px; font-weight: 700; line-height: 1; margin-bottom: 9px; }
+  .big small { font-size: 11px; font-weight: 400; color: var(--dim); }
+  #status { position: absolute; inset: 0; display: grid; place-items: center; z-index: 700;
+    background: var(--bg); color: var(--dim); font-size: 14px; text-align: center; padding: 24px; }
+  #status.done { display: none; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="bar">
+  <h1>Tutukaka Hotspots</h1>
+  <span class="date" id="stamp"></span>
+</div>
+
+<div id="sheet">
+  <div id="grab">
+    <div class="pill"></div>
+    <div class="row"><b>Today's best marks</b><span id="summary">loading…</span></div>
+  </div>
+  <div id="list"></div>
+</div>
+
+<div id="status">Loading today's grid&hellip;</div>
+
+<script src="vendor/leaflet.js"></script>
+<script>
+const DATA_URL = "hotspots_today.geojson";
+const el = (id) => document.getElementById(id);
+
+// zoomSnap 0 lets fitBounds use a fractional zoom. With the default of 1 it
+// rounds down to the next whole zoom, which on a phone leaves the grid
+// filling barely half the screen.
+const map = L.map("map", {
+  preferCanvas: true, zoomControl: false, minZoom: 7, zoomSnap: 0, attributionControl: true,
+}).setView([-35.55, 174.62], 10);
+
+const BAR_PX = 62;     // top bar
+const SHEET_PX = 104;  // collapsed bottom sheet
+
+L.tileLayer(
+  "https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}",
+  { maxZoom: 13, opacity: 0.85, attribution: "Esri Ocean" }
+).addTo(map);
+L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png",
+  { maxZoom: 19, attribution: "&copy; OSM, CARTO" }).addTo(map);
+
+const RAMP = ["#fde68a","#fcd34d","#fbbf24","#f97316","#ea580c","#dc2626","#9d174d","#581c87"];
+// Percentile is uniform by construction; cubing it keeps ordinary ground
+// yellow and reserves red/purple for the standout few percent.
+const emph = (p) => Math.pow(Math.max(0, Math.min(100, p || 0)) / 100, 3);
+const colourFor = (p) => RAMP[Math.min(RAMP.length - 1, Math.floor(emph(p) * RAMP.length))];
+
+const styleFor = (f) => ({
+  fillColor: colourFor(f.properties.score_percentile),
+  fillOpacity: 0.14 + 0.70 * emph(f.properties.score_percentile),
+  color: f.properties.is_thermal_front ? "#67e8f9" : "#0b1620",
+  weight: f.properties.is_thermal_front ? 0.6 : 0.1,
+  opacity: f.properties.is_thermal_front ? 0.8 : 0.3,
+});
+
+const fmt = (v, u = "", dp = 1) =>
+  v === null || v === undefined ? "&mdash;" : `${Number(v).toFixed(dp)}${u}`;
+
+function popupHtml(p) {
+  const b = p.score_breakdown || {};
+  return `
+    <div class="big">${fmt(p.hotspot_score, "", 1)}<small> / 100 &middot; rank #${p.rank}</small></div>
+    <div class="pv"><span>Position</span><span class="co">${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}</span></div>
+    <div class="pv"><span>Depth</span><span>${fmt(p.depth_m, " m")}</span></div>
+    <div class="pv"><span>Water temp</span><span>${fmt(p.sst_c, " &deg;C", 1)}</span></div>
+    <div class="pv"><span>Gradient</span><span>${fmt(p.temp_gradient_c_per_km, " &deg;C/km", 2)}</span></div>
+    <div class="pv"><span>Slope</span><span>${fmt(p.slope_deg, "&deg;", 1)}</span></div>
+    <div class="pv"><span>Current</span><span>${fmt(p.current_speed_ms, " m/s", 2)} @ ${fmt(p.current_bearing_deg, "&deg;", 0)}</span></div>
+    <div class="pv" style="margin-top:8px"><span>Front / slope / current</span>
+      <span>${fmt(b.temp_contribution, "", 0)} / ${fmt(b.slope_contribution, "", 0)} / ${fmt(b.current_contribution, "", 0)} pts</span></div>
+    <div style="margin-top:10px"><a href="https://maps.apple.com/?ll=${p.lat},${p.lon}&q=Mark%20${p.rank}"
+      style="color:#38bdf8">Open in Maps</a></div>`;
+}
+
+function markRow(p) {
+  const row = document.createElement("div");
+  row.className = "mark";
+  row.innerHTML = `
+    <div class="score" style="color:${colourFor(p.score_percentile)}">${Math.round(p.hotspot_score)}</div>
+    <div class="body">
+      <div class="co">${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}</div>
+      <div class="sub">${Math.round(p.depth_m)} m &middot; ${p.sst_c.toFixed(1)} &deg;C${
+        p.is_thermal_front ? ' &middot; <span class="front">front</span>' : ""}</div>
+    </div>
+    <a class="nav" href="https://maps.apple.com/?ll=${p.lat},${p.lon}&q=Mark%20${p.rank}">Go</a>`;
+  row.addEventListener("click", (e) => {
+    if (e.target.closest("a")) return;
+    el("sheet").classList.remove("open");
+    map.setView([p.lat, p.lon], 13);
+    L.popup({ maxWidth: 244 }).setLatLng([p.lat, p.lon]).setContent(popupHtml(p)).openOn(map);
+  });
+  return row;
+}
+
+el("grab").addEventListener("click", () => el("sheet").classList.toggle("open"));
+
+(async function init() {
+  try {
+    const resp = await fetch(DATA_URL, { cache: "no-cache" });
+    if (!resp.ok) throw new Error(`${resp.status}`);
+    const data = await resp.json();
+    const meta = data.metadata;
+
+    L.geoJSON(data, {
+      style: styleFor,
+      onEachFeature: (f, lyr) =>
+        lyr.bindPopup(() => popupHtml(f.properties), { maxWidth: 244 }),
+    }).addTo(map);
+    map.fitBounds([[meta.bbox[1], meta.bbox[0]], [meta.bbox[3], meta.bbox[2]]], {
+      paddingTopLeft: [6, BAR_PX],
+      paddingBottomRight: [6, SHEET_PX],
+    });
+
+    const synthetic = meta.sources.is_synthetic;
+    el("stamp").innerHTML =
+      `${meta.date} <span class="badge ${synthetic ? "mock" : "live"}">${synthetic ? "synthetic" : "live"}</span>`;
+    el("summary").textContent =
+      `top ${Math.min(25, data.features.length)} of ${data.features.length.toLocaleString("en-NZ")}`;
+
+    const list = el("list");
+    data.features.slice(0, 25).forEach((f) => list.appendChild(markRow(f.properties)));
+    el("status").classList.add("done");
+  } catch (err) {
+    el("status").innerHTML =
+      `Couldn't load today's grid.<br><span style="font-size:12px">${err.message}</span>`;
+  }
+})();
+</script>
+</body>
+</html>

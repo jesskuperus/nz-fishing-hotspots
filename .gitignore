@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+
+# Generated locally by the engine; the published copy lives in public/.
+data/output/*.geojson
+data/bathymetry/*
+!data/bathymetry/.gitkeep
+!data/output/.gitkeep
