@@ -8,3 +8,6 @@ data/output/*.geojson
 data/bathymetry/*
 !data/bathymetry/.gitkeep
 !data/output/.gitkeep
+
+# A personal catch log, not repo content.
+data/catch_log.csv

@@ -98,3 +98,30 @@ Until it is, treat the map as "here is where the structure and the water
 change", not a catch prediction. Logging where you actually caught fish and
 comparing against that day's grid is the only thing that turns this into a
 predictor.
+
+## 5. Real bathymetry, automatically (~2 min, free)
+
+```bash
+python scripts/fetch_bathymetry.py
+.venv/bin/pip install rasterio
+```
+
+Downloads GEBCO 2024 (~450 m global grid, no account) into
+`data/bathymetry/`, where the loader picks it up on the next run.
+
+**Unverified:** this sandbox blocks the GEBCO endpoint (HTTP 403 from the
+outbound proxy), so the download path has never actually completed here. The
+failure path is tested; the success path is not. If it 403s or returns an
+error page, the script says so and the pipeline carries on synthetic.
+
+## 6. Log your trips (~30 seconds per trip, free, and the one that matters)
+
+```bash
+python scripts/log_catch.py --lat -35.47 --lon 174.74 \
+    --species snapper --fish 4 --hours 3
+python scripts/calibrate.py
+```
+
+The score's weights have never been checked against a fish. Twenty logged
+trips is the point at which `calibrate.py` will tell you whether the map is
+finding anything real. Nothing else on this list changes that.

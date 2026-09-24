@@ -195,9 +195,11 @@ function popupHtml(p) {
       ${p.is_thermal_front ? '<span class="badge" style="color:#67e8f9">front</span>' : ""}</span></div>
     <div class="row"><span class="k">Seabed slope</span><span>${fmt(p.slope_deg, "&deg;", 2)}</span></div>
     <div class="row"><span class="k">Current</span><span>${fmt(p.current_speed_ms, " m/s", 2)} @ ${fmt(p.current_bearing_deg, "&deg;", 0)}</span></div>
+    <div class="row"><span class="k">Chlorophyll</span><span>${fmt(p.chlorophyll_mg_m3, " mg/m&sup3;", 2)}</span></div>
     ${bar("Thermal front (40%)", b.temp_contribution, 40, `normalised ${fmt(b.temp_gradient_weight, "", 2)}`)}
     ${bar("Depth slope (40%)", b.slope_contribution, 40, `normalised ${fmt(b.depth_slope_weight, "", 2)}`)}
-    ${bar("Current (20%)", b.current_contribution, 20, `normalised ${fmt(b.current_weight, "", 2)}`)}`;
+    ${bar("Current (20%)", b.current_contribution, 20, `normalised ${fmt(b.current_weight, "", 2)}`)}
+    ${bar("Productivity (15%)", b.chlorophyll_contribution, 15, `chlorophyll normalised ${fmt(b.chlorophyll_weight, "", 2)}`)}`;
 }
 
 function renderMeta(meta) {
@@ -209,6 +211,7 @@ function renderMeta(meta) {
     <div class="row"><span class="k">Data</span><span>${badge}</span></div>
     <div class="row"><span class="k">Ocean</span><span style="font-size:11px">${s.ocean || "?"}</span></div>
     <div class="row"><span class="k">Seabed</span><span style="font-size:11px">${s.bathymetry || "?"}</span></div>
+    <div class="row"><span class="k">Chlorophyll</span><span style="font-size:11px">${s.chlorophyll || "?"}</span></div>
     <div class="row"><span class="k">Cells shown</span><span>${(meta.features_returned ?? 0).toLocaleString("en-NZ")}</span></div>
     <div class="row"><span class="k">Cell size</span><span>${meta.grid.actual_cell_size_m.map((v) => Math.round(v)).join(" &times; ")} m</span></div>
     <div class="row"><span class="k">Score max</span><span>${fmt(meta.score_stats.max)}</span></div>
@@ -216,6 +219,18 @@ function renderMeta(meta) {
     <div class="row"><span class="k">Front cells</span><span>${meta.thermal_front_cells.toLocaleString("en-NZ")}</span></div>
     <div class="row"><span class="k">SST range</span><span>${meta.sst_range_c.map((v) => fmt(v, "", 1)).join(" &ndash; ")} &deg;C</span></div>
     <div class="row"><span class="k">Depth range</span><span>${meta.depth_range_m.map((v) => Math.round(v)).join(" &ndash; ")} m</span></div>`;
+  // When to go, kept visibly separate from where: tide, light and moon
+  // shift every cell equally, so they never touch the cell ranking.
+  const t = meta.timing;
+  if (t && t.available) {
+    const best = (t.best_hours || []).map((h) => `${h.local}`).join(", ");
+    const fish = t.fishability_summary || {};
+    el("meta").innerHTML += `
+      <div class="row" style="margin-top:10px"><span class="k">Best bite</span><span>${best}</span></div>
+      <div class="row"><span class="k">Moon</span><span>${(t.moon || {}).phase || "?"}${(t.moon || {}).is_spring_tide ? " &middot; spring" : ""}</span></div>
+      <div class="row"><span class="k">Sun</span><span>${t.sunrise_local} &ndash; ${t.sunset_local}</span></div>
+      <div class="row"><span class="k">Sea state</span><span>${fmt(fish.daylight_mean, "/100", 0)}</span></div>`;
+  }
   el("legendRange").textContent = `${fmt(meta.score_stats.min, "", 0)} – ${fmt(meta.score_stats.max, "", 0)}`;
 }
 

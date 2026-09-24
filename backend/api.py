@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
+import sys
 import threading
 from pathlib import Path
 
@@ -167,6 +168,37 @@ def top_spots(
         "sources": payload["metadata"]["sources"],
         "spots": [feat["properties"] for feat in payload["features"]],
     }
+
+
+@app.get("/api/v1/windows")
+def bite_windows(date: str | None = None) -> dict:
+    """When to go, as opposed to where.
+
+    Tide movement, daylight and moon phase shift every cell on the map
+    equally, so they are scored here on a timeline instead of inside the
+    per-cell hotspot score. Wind and swell ride along as a separate
+    fishability number: they do not move the fish, they stop you reaching
+    them.
+    """
+    from backend.engine.grid import build_grid
+    from backend.engine.pipeline import _timing_block
+
+    return _timing_block(_parse_date(date), build_grid())
+
+
+@app.get("/api/v1/calibration")
+def calibration() -> dict:
+    """How well the score has actually predicted catches -- usually: unknown.
+
+    The weights came from the spec, not from data. This endpoint reports the
+    state of the catch log rather than pretending otherwise.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import calibrate  # noqa: PLC0415
+
+    from backend.calibration.catch_log import load_entries  # noqa: PLC0415
+
+    return calibrate.report(load_entries())
 
 
 def _parse_date(raw: str | None) -> dt.date:

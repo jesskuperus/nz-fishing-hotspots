@@ -153,3 +153,61 @@ opens like an app.
 year. If that starts to bite, switch the workflow to push the GeoJSON to a
 single-commit orphan branch (or object storage) and point `DATA_URL` in
 `hotspots.html` at it.
+
+## When to go, not just where
+
+The map answers *where*. Tide, daylight, moon and weather answer *when* — and
+they are scored separately on purpose. A rising tide lifts every cell on the
+map by the same amount, so folding it into the cell score would inflate the
+numbers without ever changing which mark ranks first.
+
+| Layer | Where it lands | Why |
+| --- | --- | --- |
+| Temp gradient, seabed slope, current | Cell score | Varies cell to cell |
+| **Chlorophyll-a** | Cell score | Varies cell to cell — a front through barren water is just a line |
+| **Tide movement, daylight, moon** | Hourly bite window | Same for the whole box |
+| **Wind, swell** | Fishability | Doesn't move fish; stops you reaching them |
+
+    Bite score = (tide movement x 0.50) + (light x 0.35) + (moon x 0.15)
+
+`GET /api/v1/windows` returns the hourly timeline; the static map ships the
+same block inside `metadata.timing`, so the phone needs no second request.
+
+## Chlorophyll in the score
+
+The formula is now:
+
+    Hotspot Score = (temp gradient x 0.40) + (depth slope x 0.40)
+                  + (current x 0.20) + (chlorophyll x 0.15)
+                  ... all divided by the total weight, so it stays 0-100
+
+Chlorophyll normalises as a **band**, not "more is better": 1.0 between 0.25
+and 1.20 mg/m³, falling away in barren blue water below and in murky bloom
+water above. `WEIGHT_CHLOROPHYLL=0` recovers the brief's original formula
+exactly.
+
+## Calibration — the only thing that makes this accurate
+
+Every weight here is a guess, mine or the brief's. Logging trips is what
+turns that into something testable:
+
+```bash
+python scripts/log_catch.py --lat -35.47 --lon 174.74 \
+    --species snapper --fish 4 --hours 3 --notes "incoming tide, 40 m"
+python scripts/calibrate.py     # rank correlation, once 20+ trips are in
+```
+
+`calibrate.py` refuses to report a correlation below 20 usable trips rather
+than dressing up noise as a finding.
+
+## Better seabed data
+
+```bash
+python scripts/fetch_bathymetry.py   # GEBCO 2024, no account needed
+pip install rasterio                  # so the loader can read it
+```
+
+The synthetic seabed is the weakest layer in the engine and half the score
+depends on its slope. **Neither the synthetic nor GEBCO grid is a navigation
+chart** — these depths are for deciding where to fish, never for deciding
+where it is safe to drive a boat.

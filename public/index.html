@@ -62,6 +62,18 @@
   .mark a.nav { flex: none; font-size: 12px; color: var(--accent); text-decoration: none;
     border: 1px solid var(--edge); border-radius: 8px; padding: 7px 10px; }
 
+  /* Bite window strip: when to go, as opposed to where. */
+  #windows { flex: none; padding: 4px 0 10px; border-top: 1px solid var(--edge); }
+  #windows .hd { display: flex; align-items: baseline; justify-content: space-between;
+    font-size: 12px; color: var(--dim); margin: 8px 0 7px; }
+  #windows .hd b { color: var(--ink); font-size: 13px; }
+  #bars { display: flex; align-items: flex-end; gap: 2px; height: 46px; }
+  #bars div { flex: 1; border-radius: 2px 2px 0 0; min-height: 2px; position: relative; }
+  #bars div.now { outline: 1px solid var(--accent); outline-offset: 1px; }
+  #ticks { display: flex; justify-content: space-between; font-size: 10px; color: var(--dim);
+    margin-top: 4px; font-variant-numeric: tabular-nums; }
+  #cond { font-size: 12px; color: var(--dim); margin-top: 8px; }
+  #cond .warn { color: #fbbf24; }
   .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--panel); color: var(--ink);
     border: 1px solid var(--edge); }
   .leaflet-popup-content { margin: 12px 14px; width: 216px !important; font-size: 14px; }
@@ -87,6 +99,13 @@
   <div id="grab">
     <div class="pill"></div>
     <div class="row"><b>Today's best marks</b><span id="summary">loading…</span></div>
+    <div class="row" style="margin-top:2px"><span id="bite">&nbsp;</span></div>
+  </div>
+  <div id="windows">
+    <div class="hd"><b>Bite window</b><span id="bestbite"></span></div>
+    <div id="bars"></div>
+    <div id="ticks"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>
+    <div id="cond"></div>
   </div>
   <div id="list"></div>
 </div>
@@ -106,7 +125,7 @@ const map = L.map("map", {
 }).setView([-35.55, 174.62], 10);
 
 const BAR_PX = 62;     // top bar
-const SHEET_PX = 104;  // collapsed bottom sheet
+const SHEET_PX = 118;  // collapsed bottom sheet
 
 L.tileLayer(
   "https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}",
@@ -142,10 +161,56 @@ function popupHtml(p) {
     <div class="pv"><span>Gradient</span><span>${fmt(p.temp_gradient_c_per_km, " &deg;C/km", 2)}</span></div>
     <div class="pv"><span>Slope</span><span>${fmt(p.slope_deg, "&deg;", 1)}</span></div>
     <div class="pv"><span>Current</span><span>${fmt(p.current_speed_ms, " m/s", 2)} @ ${fmt(p.current_bearing_deg, "&deg;", 0)}</span></div>
-    <div class="pv" style="margin-top:8px"><span>Front / slope / current</span>
-      <span>${fmt(b.temp_contribution, "", 0)} / ${fmt(b.slope_contribution, "", 0)} / ${fmt(b.current_contribution, "", 0)} pts</span></div>
+    <div class="pv"><span>Chlorophyll</span><span>${fmt(p.chlorophyll_mg_m3, " mg/m&sup3;", 2)}</span></div>
+    <div class="pv" style="margin-top:8px"><span>Front / slope</span>
+      <span>${fmt(b.temp_contribution, "", 0)} / ${fmt(b.slope_contribution, "", 0)} pts</span></div>
+    <div class="pv"><span>Current / food</span>
+      <span>${fmt(b.current_contribution, "", 0)} / ${fmt(b.chlorophyll_contribution, "", 0)} pts</span></div>
     <div style="margin-top:10px"><a href="https://maps.apple.com/?ll=${p.lat},${p.lon}&q=Mark%20${p.rank}"
       style="color:#38bdf8">Open in Maps</a></div>`;
+}
+
+// The bite strip answers "when", the map answers "where". They are scored
+// separately on purpose: tide, light and moon move every cell equally, so
+// mixing them into the cell score would change the numbers without ever
+// changing which mark ranks first.
+function renderWindows(timing) {
+  const box = el("windows");
+  if (!timing || !timing.available) { box.style.display = "none"; return; }
+
+  const nowNz = new Date(Date.now() + (new Date().getTimezoneOffset() + 720) * 60000);
+  const bars = el("bars");
+  timing.hours
+    .slice()
+    .sort((a, b) => ((a.utc_hour + 12) % 24) - ((b.utc_hour + 12) % 24))
+    .forEach((h) => {
+      const localHour = (h.utc_hour + 12) % 24;
+      const bar = document.createElement("div");
+      const s = Math.max(0, Math.min(100, h.bite_score));
+      bar.style.height = `${8 + 0.92 * s * 0.38}px`;
+      bar.style.background = colourFor(s);
+      // A great bite in unfishable weather is not a plan: fade the bar.
+      const fish = h.fishability === undefined ? 100 : h.fishability;
+      bar.style.opacity = (0.25 + 0.75 * fish / 100).toFixed(2);
+      bar.title = `${h.local} · bite ${s} · ${fmt(h.wind_kt, " kt", 0)} ${h.wind_dir || ""}`;
+      if (localHour === nowNz.getHours()) bar.className = "now";
+      bars.appendChild(bar);
+    });
+
+  const best = (timing.best_hours || []).map((h) => h.local).join(", ");
+  el("bestbite").textContent = best ? `best ${best}` : "";
+  el("bite").innerHTML = best ? `Best bite <b style="color:var(--ink)">${best.split(", ")[0]}</b>` : "&nbsp;";
+
+  const moon = timing.moon || {};
+  const fish = timing.fishability_summary || {};
+  const synthetic = (timing.conditions_source || "").includes("synthetic");
+  el("cond").innerHTML =
+    `${moon.phase || "?"} moon &middot; ${moon.is_spring_tide ? "spring" : "neap"} tide &middot; ` +
+    `sun ${timing.sunrise_local || "?"}&ndash;${timing.sunset_local || "?"}<br>` +
+    `Sea state ${fmt(fish.daylight_mean, "/100", 0)} in daylight` +
+    (synthetic
+      ? ' &middot; <span class="warn">forecast is synthetic &mdash; check MetService before you go</span>'
+      : "");
 }
 
 function markRow(p) {
@@ -192,6 +257,8 @@ el("grab").addEventListener("click", () => el("sheet").classList.toggle("open"))
       `${meta.date} <span class="badge ${synthetic ? "mock" : "live"}">${synthetic ? "synthetic" : "live"}</span>`;
     el("summary").textContent =
       `top ${Math.min(25, data.features.length)} of ${data.features.length.toLocaleString("en-NZ")}`;
+
+    renderWindows(meta.timing);
 
     const list = el("list");
     data.features.slice(0, 25).forEach((f) => list.appendChild(markRow(f.properties)));

@@ -105,3 +105,46 @@ LINZ_BATHYMETRY_FILE = os.getenv("LINZ_BATHYMETRY_FILE", "")
 MAPBOX_TOKEN = os.getenv("MAPBOX_TOKEN", "")
 
 RANDOM_SEED = int(_env_float("RANDOM_SEED", 20260922))
+
+# --- Chlorophyll-a (spatial: where the food chain starts) -------------------
+# Productive water is a band, not "more is better": a blue desert holds no
+# bait, and a thick bloom is murky, oxygen-poor water gamefish avoid. These
+# are the edges of the band that scores 1.0, in mg/m^3.
+CHL_IDEAL_MIN_MG_M3 = _env_float("CHL_IDEAL_MIN_MG_M3", 0.25)
+CHL_IDEAL_MAX_MG_M3 = _env_float("CHL_IDEAL_MAX_MG_M3", 1.20)
+CHL_CEILING_MG_M3 = _env_float("CHL_CEILING_MG_M3", 4.0)
+USE_LIVE_CHLOROPHYLL = os.getenv("USE_LIVE_CHLOROPHYLL", "true").lower() not in (
+    "false",
+    "0",
+    "no",
+)
+
+# Hotspot score weights (spatial terms only). They are renormalised in
+# scoring, so changing one does not silently rescale the rest.
+# The brief's formula was 0.4 / 0.4 / 0.2 with no chlorophyll term; adding
+# productivity takes a slice off each of the three rather than inflating the
+# total. Set WEIGHT_CHLOROPHYLL=0 to get the original formula back exactly.
+WEIGHT_CHLOROPHYLL = _env_float("WEIGHT_CHLOROPHYLL", 0.15)
+
+# --- Bite window (temporal: when to go, same for every cell) ---------------
+# Deliberately NOT part of the per-cell score: tide, light and moon shift
+# every cell by the same factor, so folding them in would change the numbers
+# without changing the ranking. They drive the hourly timeline instead.
+WEIGHT_TIDE_MOVEMENT = _env_float("WEIGHT_TIDE_MOVEMENT", 0.50)
+WEIGHT_LIGHT = _env_float("WEIGHT_LIGHT", 0.35)
+WEIGHT_MOON = _env_float("WEIGHT_MOON", 0.15)
+
+# --- Fishability (wind and swell: whether you can get out at all) ----------
+# Small-trailer-boat limits off Tutukaka. Above the max it is a no-go day.
+WIND_COMFORTABLE_KT = _env_float("WIND_COMFORTABLE_KT", 10.0)
+WIND_MAX_KT = _env_float("WIND_MAX_KT", 25.0)
+SWELL_COMFORTABLE_M = _env_float("SWELL_COMFORTABLE_M", 1.0)
+SWELL_MAX_M = _env_float("SWELL_MAX_M", 2.5)
+USE_LIVE_WEATHER = os.getenv("USE_LIVE_WEATHER", "true").lower() not in (
+    "false",
+    "0",
+    "no",
+)
+
+# --- Catch log / calibration ------------------------------------------------
+CATCH_LOG_PATH = Path(os.getenv("CATCH_LOG_PATH", DATA_DIR / "catch_log.csv"))
