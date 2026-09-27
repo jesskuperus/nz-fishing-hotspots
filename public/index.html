@@ -113,6 +113,10 @@
   .pv + .pv { margin-top: 3px; } .pv span:first-child { color: var(--dim); }
   .big { font-size: 27px; font-weight: 700; line-height: 1; margin-bottom: 9px; }
   .big small { font-size: 11px; font-weight: 400; color: var(--dim); }
+  #nobase { display: none; position: absolute; left: 50%; transform: translateX(-50%);
+    top: calc(var(--safe-top) + 46px); z-index: 620; font-size: 11px; color: #fbbf24;
+    background: rgba(9,18,28,.92); border: 1px solid var(--edge); border-radius: 99px;
+    padding: 4px 11px; white-space: nowrap; }
   #status { position: absolute; inset: 0; display: grid; place-items: center; z-index: 700;
     background: var(--bg); color: var(--dim); font-size: 14px; text-align: center; padding: 24px; }
   #status.done { display: none; }
@@ -157,6 +161,8 @@
   <div id="list"></div>
 </div>
 
+<div id="nobase">Basemap offline &mdash; marks and grid still live</div>
+
 <div id="status">Loading today's grid&hellip;</div>
 
 <script src="vendor/leaflet.js"></script>
@@ -179,22 +185,44 @@ const SHEET_PX = 118;  // collapsed bottom sheet
 // across the tiles. If CARTO is unreachable we drop to plain OSM rather
 // than leave a skipper staring at an empty grid on a grey void.
 const OSM_FALLBACK = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-let baseFallenBack = false;
 
-const base = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+// Retina phones ask for @2x tiles. CARTO serves them, but if a network or
+// proxy only has the 1x tiles cached the @2x request is the one that fails,
+// so the whole basemap goes missing on exactly the device that matters most.
+// Plain 1x tiles everywhere is the safer trade: slightly softer on a Retina
+// screen, but it renders.
+const CARTO = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png";
+
+const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>';
+let baseFallenBack = false;
+let tileErrors = 0;
+
+const base = L.tileLayer(CARTO, {
   maxZoom: 19,
   subdomains: "abcd",
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; CARTO',
+  attribution: `${OSM_ATTR} &copy; CARTO`,
 }).addTo(map);
 
+// One failed tile is normal -- a 404 at the edge of coverage, a dropped
+// request on a patchy connection. Tearing the whole basemap down for that
+// would swap a working map for a worse one. Only a run of failures means
+// the provider is actually unreachable.
 base.on("tileerror", () => {
-  if (baseFallenBack) return;
+  if (baseFallenBack || ++tileErrors < 6) return;
   baseFallenBack = true;
   map.removeLayer(base);
-  L.tileLayer(OSM_FALLBACK, {
-    maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
-  }).addTo(map);
+
+  const osm = L.tileLayer(OSM_FALLBACK, { maxZoom: 19, attribution: OSM_ATTR });
+  let osmErrors = 0;
+  // If OSM is unreachable too, say so instead of leaving a blank void: the
+  // grid and the marks still work without a basemap, and a skipper should
+  // know that is what they are looking at.
+  osm.on("tileerror", () => {
+    if (++osmErrors < 6) return;
+    const note = el("nobase");
+    if (note) note.style.display = "block";
+  });
+  osm.addTo(map);
 });
 
 const RAMP = ["#fde68a","#fcd34d","#fbbf24","#f97316","#ea580c","#dc2626","#9d174d","#581c87"];
