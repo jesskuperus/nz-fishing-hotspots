@@ -595,7 +595,7 @@ function renderDayPreview(day) {
 const FUTURE_HTML = `<h2>Coming soon <span class="badge mock">planned</span></h2>
   <p class="muted">Ideas for a future release, not available in this prototype.</p>
   <div class="future-item"><b>Live data feeds</b><small>Replace modelled inputs with current ocean and weather feeds.</small></div>
-  <div class="future-item"><b>Multi-day forecast</b><small>Compare marks across upcoming days.</small></div>
+  <div class="future-item"><b>Live multi-day forecast</b><small>Replace the synthetic multi-day preview with verified future feeds.</small></div>
   <div class="future-item"><b>Tide times</b><small>See tide timing beside bite windows.</small></div>
   <div class="future-item"><b>Offline mode</b><small>Save the map and marks before heading out.</small></div>
   <div class="future-item"><b>Window alerts</b><small>Know when a promising fishing window opens.</small></div>
@@ -625,10 +625,11 @@ function renderCatchList() {
   const list = el("catch-list");
   if (!list) return;
   const catches = readCatches();
-  list.innerHTML = catches.length ? catches.slice().reverse().map((c) =>
+  list.innerHTML = catches.length ? catches.slice().reverse().map((c, reverseIndex) =>
     `<div class="catch-entry"><b>${escapeHtml(c.species)}</b> · ${escapeHtml(c.length || "—")} cm / ${escapeHtml(c.weight || "—")} kg
       <small>${escapeHtml(c.date)} · ${escapeHtml(c.mark || "No mark")}</small>
-      ${c.note ? `<div>${escapeHtml(c.note)}</div>` : ""}</div>`).join("") :
+      ${c.note ? `<div>${escapeHtml(c.note)}</div>` : ""}
+      <button class="iconbtn remove-catch" type="button" data-index="${catches.length - 1 - reverseIndex}" aria-label="Delete logged catch">Delete</button></div>`).join("") :
     '<p class="muted">No catches logged yet.</p>';
 }
 function showFeature(name, mark = null) {
@@ -686,6 +687,19 @@ function showFeature(name, mark = null) {
   panel.scrollTop = 0;
   el("feature-close").focus();
 }
+el("feature-content").addEventListener("click", (e) => {
+  const button = e.target.closest(".remove-catch");
+  if (!button) return;
+  const catches = readCatches();
+  const index = Number(button.dataset.index);
+  if (!Number.isInteger(index) || index < 0 || index >= catches.length) return;
+  catches.splice(index, 1);
+  try {
+    localStorage.setItem(CATCH_KEY, JSON.stringify(catches));
+    renderCatchList();
+    el("catch-feedback").textContent = "Catch deleted from this device.";
+  } catch (_) { el("catch-feedback").textContent = "Could not delete. Check browser storage settings."; }
+});
 document.querySelectorAll("#feature-nav button").forEach((button) => button.addEventListener("click", (e) => {
   e.stopPropagation(); lastFeatureButton = button; showFeature(button.dataset.feature);
 }));
