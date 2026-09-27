@@ -57,7 +57,7 @@
     border-radius: 16px 16px 0 0; backdrop-filter: blur(10px);
     padding: 0 14px calc(var(--safe-bottom) + 12px);
     max-height: min(70%, 620px); display: flex; flex-direction: column;
-    transform: translateY(calc(100% - 96px)); transition: transform .25s ease;
+    transform: translateY(calc(100% - 196px)); transition: transform .25s ease;
   }
   #sheet.open { transform: translateY(0); }
   /* Fully stowed: just the handle bar, so the map is never obscured. */
@@ -136,8 +136,8 @@
     .mark .co { font-size: 12px; }
   }
   /* Future-feature preview: panels never block the map unless opened. */
-  #feature-nav { display: flex; gap: 6px; flex: none; padding: 5px 0 8px; }
-  #feature-nav button { flex: 1; min-width: 0; min-height: 40px; padding: 5px 3px; font-size: 11px; }
+  #feature-nav { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; flex: none; padding: 5px 0 8px; }
+  #feature-nav button { min-width: 0; min-height: 38px; padding: 5px 3px; font-size: 11px; }
   #feature-panel { position: absolute; z-index: 800; right: 12px; bottom: 12px;
     width: min(430px, calc(100% - 24px)); max-height: min(74vh, 650px); overflow-y: auto;
     overscroll-behavior: contain; padding: 16px; border: 1px solid var(--edge);
@@ -146,7 +146,7 @@
   #feature-panel h2 { font-size: 17px; margin: 0 40px 6px 0; }
   #feature-panel .muted { color: var(--dim); font-size: 12px; margin: 5px 0 12px; }
   #feature-close { position: absolute; right: 12px; top: 12px; }
-  .rule, .catch-entry, .future-item { border-top: 1px solid var(--edge); padding: 10px 0; }
+  .rule, .catch-entry, .future-item, .day-mark { border-top: 1px solid var(--edge); padding: 10px 0; }
   .rule b, .future-item b { display: block; }
   .rule small, .future-item small { display: block; color: var(--dim); margin-top: 3px; }
   #catch-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -158,6 +158,13 @@
   #catch-form textarea { min-height: 64px; resize: vertical; }
   #catch-form button { background: #155875; color: white; font-weight: 600; }
   #catch-feedback { color: #fcd34d; min-height: 18px; }
+  .day-picker { display: flex; gap: 5px; margin: 12px 0; }
+  .day-picker button { flex: 1; min-width: 0; min-height: 42px; padding: 5px 2px; }
+  .day-picker button[aria-pressed="true"] { background: #155875; color: white; }
+  .demo-flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 15px 0; }
+  .demo-flow span { border: 1px solid #486475; border-radius: 8px; padding: 7px; font-size: 12px; }
+  .demo-flow i { color: var(--accent); font-style: normal; }
+  .day-mark { font-size: 13px; }
   .catch-entry { font-size: 13px; overflow-wrap: anywhere; }
   .catch-entry small { color: var(--dim); display: block; }
   @media (max-width: 390px) { #feature-panel { max-height: 76vh; } #feature-nav button { font-size: 10px; } }
@@ -203,6 +210,8 @@
     <div class="row" style="margin-top:2px"><span id="summary">loading…</span><span id="bite">&nbsp;</span></div>
   </div>
   <div id="feature-nav" aria-label="Prototype features">
+    <button class="iconbtn" type="button" data-feature="forecast">Multi-day</button>
+    <button class="iconbtn" type="button" data-feature="brain">Fishing brain</button>
     <button class="iconbtn" type="button" data-feature="rules">MPI rules</button>
     <button class="iconbtn" type="button" data-feature="log">Catch log</button>
     <button class="iconbtn" type="button" data-feature="future">Coming soon</button>
@@ -247,7 +256,7 @@ const map = L.map("map", {
 }).setView([-35.55, 174.62], 10);
 
 const BAR_PX = 62;     // top bar
-const SHEET_PX = 118;  // collapsed bottom sheet
+const SHEET_PX = 210;  // collapsed bottom sheet and feature shortcuts
 
 // World Imagery is a key-free prototype basemap; keep imagery source credits
 // visible and offer OSM Standard both by choice and if image tiles fail.
@@ -552,6 +561,37 @@ const RULES_HTML = `<h2>MPI regulations <span class="badge mock">prototype</span
   <p class="muted">MPI lists a combined daily finfish bag limit of 20 per fisher in this area (with exceptions). Source:
     <a href="${MPI_URL}" target="_blank" rel="noopener noreferrer">MPI Auckland &amp; Kermadec rules</a>.
     Sample - always check MPI before fishing.</p>`;
+const BRAIN_HTML = `<h2>How it connects <span class="badge mock">prototype</span></h2>
+  <p class="muted">A demo of the proposed fishing brain, not a live prediction system.</p>
+  <div class="demo-flow"><span>Ocean + weather + tides + water colour</span><i>→</i>
+  <span>Species seasonality + depth</span><i>→</i><span>Scoring and bite windows</span><i>→</i>
+  <span>Ranked marks + multi-day view</span><i>→</i><span>Catch log</span><i>→</i><span>Smarter future predictions</span></div>
+  <div class="future-item"><b>Inputs</b><small>Bring licensed or public current feeds together, check coverage and update times, and explain missing data.</small></div>
+  <div class="future-item"><b>Decision</b><small>Combine sea state, habitat and timing to rank where and when to go; MPI rules remain an independent safety check.</small></div>
+  <div class="future-item"><b>Learning loop</b><small>Optional catch logs could help test and tune scores later. This prototype saves logs only on this device; it does not train a model.</small></div>`;
+let demoTopMarks = [];
+let demoMarine = null;
+const FORECAST_HTML = `<h2>Multi-day outlook <span class="badge mock">synthetic prototype</span></h2>
+  <p class="muted">Choose a day to preview a sample ranking and sea state. The map remains today's synthetic grid; future marks below are mock previews, not navigation data or a real forecast.</p>
+  <div id="day-picker" class="day-picker" role="group" aria-label="Sample forecast day">
+    <button class="iconbtn" type="button" data-day="0" aria-pressed="true">Today</button>
+    <button class="iconbtn" type="button" data-day="1" aria-pressed="false">+1 day</button>
+    <button class="iconbtn" type="button" data-day="2" aria-pressed="false">+2 days</button>
+  </div><div id="day-preview"></div>
+  <div class="future-item"><b>Real tide times <span class="badge mock">planned</span></b><small>Sample tide rhythm (illustration only; no times or heights):</small>
+    <div aria-label="Illustrative tide curve, not current tides" style="height:40px;margin-top:8px;border-bottom:1px solid var(--edge);background:repeating-linear-gradient(90deg,transparent,transparent 19%,#244153 20%);position:relative">
+      <svg aria-hidden="true" viewBox="0 0 300 40" preserveAspectRatio="none" style="width:100%;height:40px"><path d="M0 25 Q38 -4 75 23 T150 23 T225 23 T300 23" fill="none" stroke="#38bdf8" stroke-width="2"/></svg>
+    </div></div>
+  <p class="muted">Tide source, location and time zone must be verified before live use. Always check a current official forecast.</p>`;
+function renderDayPreview(day) {
+  document.querySelectorAll("#day-picker button").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.day) === day)));
+  const shifts = [0, -6, 4];
+  const wind = demoMarine && Number.isFinite(Number(demoMarine.wind_kt)) ? Math.round(Number(demoMarine.wind_kt) + day * 3) : null;
+  el("day-preview").innerHTML = `<b>${day === 0 ? "Today" : `Day +${day}`} · sample outlook</b>
+    <p class="muted">${day ? "Illustrative change only. " : "Based on today's synthetic marks. "}Wind: ${wind === null ? "sample unavailable" : wind + " kt (sample)"} · swell: ${day ? (1.2 + day * 0.3).toFixed(1) + " m (sample)" : demoMarine && demoMarine.swell_m != null ? Number(demoMarine.swell_m).toFixed(1) + " m (synthetic)" : "sample unavailable"}</p>
+    <b>Preview marks (not on the map)</b>${demoTopMarks.slice(0, 3).map((p, i) =>
+      `<div class="day-mark">#${i + 1} · Score ${Math.max(0, Math.min(100, Math.round(p.hotspot_score + shifts[day] + i * day)))} · ${escapeHtml((p.species || []).join(", ") || "Species to check")}</div>`).join("")}`;
+}
 const FUTURE_HTML = `<h2>Coming soon <span class="badge mock">planned</span></h2>
   <p class="muted">Ideas for a future release, not available in this prototype.</p>
   <div class="future-item"><b>Live data feeds</b><small>Replace modelled inputs with current ocean and weather feeds.</small></div>
@@ -559,7 +599,12 @@ const FUTURE_HTML = `<h2>Coming soon <span class="badge mock">planned</span></h2
   <div class="future-item"><b>Tide times</b><small>See tide timing beside bite windows.</small></div>
   <div class="future-item"><b>Offline mode</b><small>Save the map and marks before heading out.</small></div>
   <div class="future-item"><b>Window alerts</b><small>Know when a promising fishing window opens.</small></div>
-  <div class="future-item"><b>GPX pro export</b><small>Plan and export custom routes and mark sets; basic mark GPX export already works.</small></div>`;
+  <div class="future-item"><b>GPX pro export</b><small>Plan and export custom routes and mark sets; basic mark GPX export already works.</small></div>
+  <div class="future-item"><b>Water colour</b><small>Use verified ocean colour / chlorophyll data to support habitat scoring.</small></div>
+  <div class="future-item"><b>Species seasonality</b><small>Show seasonal patterns alongside local conditions.</small></div>
+  <div class="future-item"><b>Bathymetry / depth layer</b><small>Toggle verified depth contours on the map; current depth readings are synthetic.</small></div>
+  <div class="future-item"><b>Offline mode indicator</b><small>Show which saved maps and forecasts are available without signal; current prototype does not promise offline access.</small></div>
+  <p class="muted">See “Fishing brain” for how these inputs could improve scoring and how catch logs could help test it.</p>`;
 const CATCH_KEY = "tutukaka-catch-log-v1";
 let selectedMark = null;
 let lastFeatureButton = null;
@@ -591,6 +636,12 @@ function showFeature(name, mark = null) {
   const panel = el("feature-panel");
   const content = el("feature-content");
   if (name === "rules") content.innerHTML = RULES_HTML;
+  if (name === "brain") content.innerHTML = BRAIN_HTML;
+  if (name === "forecast") {
+    content.innerHTML = FORECAST_HTML;
+    content.querySelectorAll("#day-picker button").forEach((b) => b.addEventListener("click", () => renderDayPreview(Number(b.dataset.day))));
+    renderDayPreview(0);
+  }
   if (name === "future") content.innerHTML = FUTURE_HTML;
   if (name === "log") {
     content.innerHTML = `<h2>Catch log <span class="badge mock">prototype</span></h2>
@@ -704,6 +755,7 @@ el("toggle").addEventListener("click", (e) => {
     renderMarine(meta.timing);
 
     const top = data.features.slice(0, 25).map((f) => f.properties);
+    demoTopMarks = top; demoMarine = meta.timing && meta.timing.marine_now;
     const list = el("list");
     top.forEach((p) => { marksByRank.set(p.rank, p); list.appendChild(markRow(p)); });
     data.features.forEach((f) => marksByRank.set(f.properties.rank, f.properties));
