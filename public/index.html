@@ -76,7 +76,7 @@
   /* Fully stowed: just the handle bar, so the map is never obscured. */
   #sheet.stowed { transform: translateY(calc(100% - 76px)); }
   #sheet.stowed #grab .row + .row, #sheet.stowed #windows,
-  #sheet.stowed #list, #sheet.stowed #marine, #sheet.stowed #export { display: none; }
+  #sheet.stowed #list, #sheet.stowed #marine, #sheet.stowed #export, #sheet.stowed #species-filter { display: none; }
   @media (min-width: 700px) {
     #sheet { max-height: 40vh; max-width: 460px; right: auto;
       border-radius: 0 16px 0 0; border-right: 1px solid var(--edge); }
@@ -149,6 +149,9 @@
     .mark .co { font-size: 12px; }
   }
   /* Feature panels never block the map unless opened. */
+  #species-filter {flex:none;display:flex;align-items:center;gap:8px;padding:4px 0 8px;font-size:12px;color:var(--dim);}
+  #species-filter select {flex:1;min-width:0;background:#102536;color:var(--ink);border:1px solid var(--edge);border-radius:7px;padding:7px;font:inherit;font-size:12px;}
+  #bars div {cursor:pointer;} #bars div.selected {outline:2px solid white;outline-offset:2px;}
   #feature-nav { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; flex: none; padding: 5px 0 8px; }
   #feature-nav button { min-width: 0; min-height: 38px; padding: 5px 2px; font-size: 10px; }
   #feature-panel { position: absolute; z-index: 1200; right: 12px; bottom: 12px;
@@ -267,6 +270,7 @@
     <button class="iconbtn" type="button" data-feature="log">Catch log</button>
     <button class="iconbtn" type="button" data-feature="explore">Explore</button>
   </div>
+  <label id="species-filter">Target species <select id="target-species"><option value="Any">Any species</option><option>Kingfish</option><option>Snapper</option><option>Hapuku</option><option>Kahawai</option><option>Marlin/Tuna</option></select></label>
   <div id="marine">
     <div class="hd">Sea state <span id="marine-at"></span></div>
     <div class="grid">
@@ -466,7 +470,7 @@ function buildGpx(marks, date) {
       tags || null,
     ].filter(Boolean).join(" | ");
     return `  <wpt lat="${p.lat.toFixed(6)}" lon="${p.lon.toFixed(6)}">
-    <name>${xmlEscape(`M${p.rank} ${Math.round(p.hotspot_score)}`)}</name>
+    <name>${xmlEscape(spotName(p))}</name>
     <desc>${xmlEscape(desc)}</desc>
     <sym>Fishing Hot Spot</sym>
     <type>hotspot</type>
@@ -515,6 +519,7 @@ function popupHtml(p) {
   const b = p.score_breakdown || {};
   return `
     <div class="big">${fmt(p.hotspot_score, "", 1)}<small> / 100 &middot; rank #${p.rank}</small></div>
+    <div class="pv"><span>Spot</span><b>${escapeHtml(spotName(p))}</b></div>
     <div class="pv"><span>Position</span><span class="co">${dd(p.lat, p.lon)}</span></div>
     <div class="pv"><span></span><span class="co" style="font-size:11px">${dmsPair(p.lat, p.lon)}</span></div>
     <div class="pv"><span>Depth</span><span>${fmt(p.depth_m, " m")}</span></div>
@@ -543,6 +548,7 @@ function renderWindows(timing) {
 
   const nowNz = new Date(Date.now() + (new Date().getTimezoneOffset() + 720) * 60000);
   const bars = el("bars");
+  bars.replaceChildren();
   timing.hours
     .slice()
     .sort((a, b) => ((a.utc_hour + 12) % 24) - ((b.utc_hour + 12) % 24))
@@ -556,6 +562,15 @@ function renderWindows(timing) {
       const fish = h.fishability === undefined ? 100 : h.fishability;
       bar.style.opacity = (0.25 + 0.75 * fish / 100).toFixed(2);
       bar.title = `${h.local} · bite ${s} · ${fmt(h.wind_kt, " kt", 0)} ${h.wind_dir || ""}`;
+      bar.setAttribute("role","button"); bar.setAttribute("tabindex","0");
+      bar.setAttribute("aria-label",bar.title);
+      const choose=()=>{
+        bars.querySelectorAll(".selected").forEach(x=>x.classList.remove("selected"));
+        bar.classList.add("selected");
+        el("bestbite").textContent=`${h.local} · bite ${Math.round(s)}/100 · wind ${fmt(h.wind_kt," kt",0)} ${h.wind_dir||""}`;
+      };
+      bar.addEventListener("click",choose);
+      bar.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();choose();}});
       if (localHour === nowNz.getHours()) bar.className = "now";
       bars.appendChild(bar);
     });
@@ -602,11 +617,12 @@ function markRow(p) {
   row.className = "mark";
   row.setAttribute("role", "button");
   row.setAttribute("tabindex", "0");
-  row.setAttribute("aria-label", `Show mark ${p.rank} on map`);
+  row.setAttribute("aria-label", `Show ${spotName(p)} on map`);
   row.innerHTML = `
     <div class="score" style="color:${colourFor(p.score_percentile)}">${Math.round(p.hotspot_score)}</div>
     <div class="body">
-      <div class="co">${dd(p.lat, p.lon)}</div>
+      <div class="co" style="color:var(--ink)">${escapeHtml(spotName(p))}</div>
+      <div class="sub">${dd(p.lat,p.lon)}</div>
       <div class="sub">${Math.round(p.depth_m)} m &middot; ${p.sst_c.toFixed(1)} &deg;C${
         p.is_thermal_front ? ' &middot; <span class="front">front</span>' : ""}</div>
       ${speciesHtml(p.species)}
@@ -662,6 +678,15 @@ const BRAIN_HTML = `<h2>Fishing brain</h2>
   <div class="future-item"><b>Inputs</b><small>Inspect the conditions dashboard under Explore.</small></div>
   <div class="future-item"><b>Decision</b><small>Combine sea state, habitat and timing to rank where and when to go; MPI rules remain an independent safety check.</small></div>
   <div class="future-item"><b>Learning loop</b><small>Catch logs stay on this device. Scores shown here are not trained on your catches.</small></div>`;
+// Working names for grid cells, generated from position and seafloor type.
+// These are distinct app labels, not established dive-site or chart names.
+function spotName(p) {
+  const north = p.lat > -35.55 ? "North" : "South";
+  const offshore = p.lon > 174.72 ? "Outer" : "Inner";
+  const terrain = p.depth_m > 150 ? "Shelf" : p.depth_m > 70 ? "Ledge" : "Reef";
+  return `${offshore} ${north} ${terrain} ${p.rank}`;
+}
+let targetSpecies = "Any";
 let demoTopMarks = [];
 let demoMarine = null;
 const FORECAST_HTML = `<h2>Multi-day outlook</h2>
@@ -700,13 +725,14 @@ function applyScenario() {
     if (activeOverlay === "depth") return {fillColor: p.depth_m < 50 ? "#67e8f9" : p.depth_m < 120 ? "#2563eb" : "#172554", fillOpacity:.52, color:"#071423",weight:.12};
     if (activeOverlay === "colour") return {fillColor: Number(p.chlorophyll_mg_m3) > .7 ? "#4ade80" : Number(p.chlorophyll_mg_m3) > .4 ? "#eab308" : "#2563eb", fillOpacity:.55,color:"#071423",weight:.12};
     const score = demoScore(p);
-    return {...styleFor(f), fillColor: colourFor(Math.max(0,Math.min(100,Number(p.score_percentile)+demoShift(p,activeDay)))),fillOpacity:.20+.68*emph(score)};
+    const selected = targetSpecies === "Any" || (p.species||[]).includes(targetSpecies);
+    return {...styleFor(f), fillColor: colourFor(Math.max(0,Math.min(100,Number(p.score_percentile)+demoShift(p,activeDay)))),fillOpacity:selected ? .20+.68*emph(score) : .035};
   });
-  const ranked = demoTopMarks.slice().sort((a,b) => demoScore(b)-demoScore(a));
+  const ranked = demoTopMarks.filter(p => targetSpecies === "Any" || (p.species||[]).includes(targetSpecies)).sort((a,b) => demoScore(b)-demoScore(a));
   const list = el("list"); list.replaceChildren();
   ranked.forEach((p) => list.appendChild(markRow(p)));
   el("grab").querySelector("b").textContent = `${dayLabel(activeDay)} best marks`;
-  el("summary").textContent = `top ${ranked.length} ranked marks`;
+  el("summary").textContent = `${ranked.length} ${targetSpecies === "Any" ? "ranked marks" : targetSpecies + " marks"}`;
   if (demoTiming) {
     const wind = demoTiming.marine_now && Number(demoTiming.marine_now.wind_kt);
     if (Number.isFinite(wind)) el("m-wind").textContent = `${Math.max(0,Math.round(wind+activeDay*3))} kt`;
@@ -720,14 +746,15 @@ function applyScenario() {
 }
 function renderDayPreview() {
   const target = el("day-preview"); if (!target) return;
-  const ranked = demoTopMarks.slice().sort((a,b)=>demoScore(b)-demoScore(a));
+  const ranked = demoTopMarks.filter(p=>targetSpecies === "Any" || (p.species||[]).includes(targetSpecies)).sort((a,b)=>demoScore(b)-demoScore(a));
   target.innerHTML = `<b>${dayLabel(activeDay)} · outlook</b>
-    <p class="muted">The map, sea state and best marks reflect your chosen day.</p>
-    <b>Explore 12 locations · tap to pin</b>${ranked.slice(0,12).map((p,i)=>`<button class="spot-button" type="button" data-spot="${p.rank}">#${i+1} · Mark ${p.rank} · Score ${Math.round(demoScore(p))}<small>${dd(p.lat,p.lon)} · ${escapeHtml((p.species||[]).join(", "))}</small></button>`).join("")}
+    <p class="muted">The map, sea state and best marks reflect your chosen day. Spot names are working labels for the marks.</p>
+    <b>Explore ${Math.min(12,ranked.length)} locations · tap to pin</b>${ranked.slice(0,12).map((p,i)=>`<button class="spot-button" type="button" data-spot="${p.rank}">#${i+1} · ${escapeHtml(spotName(p))} · Score ${Math.round(demoScore(p))}<small>${dd(p.lat,p.lon)} · ${escapeHtml((p.species||[]).join(", "))}</small></button>`).join("")}
     <div class="future-item"><b>Tides</b><small>High and low times near Tutukaka.</small>
     ${tideTimes(activeDay).map(t=>`<div class="day-mark">${t.type} ${t.time} · ${t.height} m</div>`).join("")}</div>
     <p class="muted">Check official tide and marine forecasts before going out.</p>`;
 }
+el("target-species").addEventListener("change", e=>{targetSpecies=e.target.value;applyScenario();});
 const EXPLORE_HTML = `<h2>Explore</h2>
   <p class="muted">Explore conditions, layers, species, routes, alerts and a saved trip pack.</p>
   <div class="explore-tabs" role="group" aria-label="Explore features">
