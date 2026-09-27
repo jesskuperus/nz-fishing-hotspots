@@ -8,6 +8,19 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <title>Tutukaka Hotspots</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%239d174d'/%3E%3C/svg%3E" />
+<meta name="description" content="Prototype that ranks fishing hotspots off the Tutukaka coast." />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Tutukaka Hotspots" />
+<meta property="og:title" content="Tutukaka Hotspots" />
+<meta property="og:description" content="Prototype that ranks fishing hotspots off the Tutukaka coast." />
+<meta property="og:url" content="https://nz-fishing-hotspots.vercel.app/" />
+<meta property="og:image" content="https://nz-fishing-hotspots.vercel.app/og-image.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Tutukaka Hotspots" />
+<meta name="twitter:description" content="Prototype that ranks fishing hotspots off the Tutukaka coast." />
+<meta name="twitter:image" content="https://nz-fishing-hotspots.vercel.app/og-image.png" />
 <!-- Leaflet is vendored so the map still opens on a boat with one bar of signal. -->
 <link rel="stylesheet" href="vendor/leaflet.css" />
 <style>
@@ -179,6 +192,24 @@
   #status { position: absolute; inset: 0; display: grid; place-items: center; z-index: 700;
     background: var(--bg); color: var(--dim); font-size: 14px; text-align: center; padding: 24px; }
   #status.done { display: none; }
+
+  /* First-visit intro: what this prototype is and what feeds the predictions. */
+  #intro { position: absolute; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center;
+    padding: 18px; background: rgba(4,9,15,.55); }
+  #intro[hidden] { display: none; }
+  #intro .card { position: relative; width: 100%; max-width: 430px; max-height: calc(100% - 20px); overflow: auto;
+    background: var(--panel); border: 1px solid var(--edge); border-radius: 14px;
+    padding: 20px 20px 14px; box-shadow: 0 12px 40px rgba(0,0,0,.55); backdrop-filter: blur(10px); }
+  #intro h2 { margin: 0 44px 8px 0; font-size: 17px; }
+  #intro p { margin: 0 0 12px; font-size: 13px; }
+  #intro .feeds-label { margin-bottom: 6px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+  #intro .feeds { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+  #intro .feeds li { padding: 4px 9px; border: 1px solid var(--edge); border-radius: 99px;
+    background: rgba(56,189,248,.08); color: var(--ink); font-size: 11.5px; }
+  #intro .also { color: var(--dim); }
+  #intro .fine { margin: 0; font-size: 11px; font-weight: 600; color: #fcd34d; }
+  #intro-close { position: absolute; top: 10px; right: 10px; min-width: 36px; min-height: 36px;
+    padding: 0; font-size: 18px; line-height: 1; color: var(--dim); }
 </style>
 </head>
 <body>
@@ -194,6 +225,7 @@
   <div id="layers" role="group" aria-label="Map background">
     <button id="satellite" type="button" aria-pressed="true">Satellite</button>
     <button id="street" type="button" aria-pressed="false">Street</button>
+    <button id="labels" type="button" aria-pressed="true">Labels</button>
   </div>
 </div>
 
@@ -241,6 +273,29 @@
 </section>
 <div id="nobase">Basemap offline &mdash; marks and grid still live</div>
 
+<div id="intro" role="dialog" aria-modal="true" aria-labelledby="intro-h">
+  <div class="card">
+    <button id="intro-close" class="iconbtn" type="button" aria-label="Close intro">&times;</button>
+    <h2 id="intro-h">Tutukaka Hotspots</h2>
+    <p>A prototype that predicts the best fishing spots off the Tutukaka coast and ranks today's top marks.</p>
+    <div class="feeds-label">Predictions blend</div>
+    <ul class="feeds">
+      <li>Sea surface temp</li><li>Chlorophyll</li><li>Currents</li><li>Wind &amp; swell</li><li>Tides &amp; moon</li><li>Depth &amp; slope</li><li>Species seasonality</li>
+    </ul>
+    <p class="also">Also on board: multi-day outlook, catch log, MPI rules, and marks export.</p>
+    <p class="fine">Synthetic data - prototype. Not for navigation.</p>
+  </div>
+</div>
+<script>
+(function () {
+  var KEY = "tutukaka-intro-dismissed";
+  var intro = document.getElementById("intro");
+  function dismiss() { intro.hidden = true; try { localStorage.setItem(KEY, "1"); } catch (e) {} }
+  try { if (localStorage.getItem(KEY) === "1") { intro.hidden = true; return; } } catch (e) {}
+  document.getElementById("intro-close").addEventListener("click", dismiss);
+})();
+</script>
+
 <div id="status">Loading today's grid&hellip;</div>
 
 <script src="vendor/leaflet.js"></script>
@@ -266,11 +321,33 @@ const ESRI_ATTR = 'Powered by <a href="https://www.esri.com/">Esri</a> | Imagery
 const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>';
 const satellite = L.tileLayer(ESRI, { maxZoom: 19, attribution: ESRI_ATTR });
 const street = L.tileLayer(OSM, { maxZoom: 19, attribution: OSM_ATTR });
+// Place names over the imagery: Esri's reference overlay is built to sit on
+// World Imagery. It gets its own pane above the hotspot grid so names stay
+// readable, and it only makes sense over satellite - OSM already has names.
+const ESRI_REF = "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}";
+const REF_ATTR = 'Labels: Esri';
+map.createPane("labelsPane");
+map.getPane("labelsPane").style.zIndex = 450;
+map.getPane("labelsPane").style.pointerEvents = "none";
+const labels = L.tileLayer(ESRI_REF, { maxZoom: 19, attribution: REF_ATTR, pane: "labelsPane" });
+let labelsOn = true;
 let activeBase = satellite;
 let tileErrors = 0;
 let streetErrors = 0;
 satellite.addTo(map);
 map.attributionControl.setPosition("topright");
+
+function applyLabels() {
+  const want = labelsOn && activeBase === satellite;
+  if (want && !map.hasLayer(labels)) labels.addTo(map);
+  if (!want && map.hasLayer(labels)) {
+    map.removeLayer(labels);
+    map.attributionControl.removeAttribution(REF_ATTR);
+  }
+  el("labels").setAttribute("aria-pressed", String(labelsOn));
+}
+applyLabels();
+el("labels").addEventListener("click", () => { labelsOn = !labelsOn; applyLabels(); });
 
 function switchBase(layer) {
   if (activeBase !== layer) {
@@ -284,6 +361,7 @@ function switchBase(layer) {
   el("satellite").setAttribute("aria-pressed", String(layer === satellite));
   el("street").setAttribute("aria-pressed", String(layer === street));
   el("nobase").style.display = "none";
+  applyLabels();
 }
 el("satellite").addEventListener("click", () => switchBase(satellite));
 el("street").addEventListener("click", () => switchBase(street));
