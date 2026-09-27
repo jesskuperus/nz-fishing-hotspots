@@ -178,6 +178,9 @@
   .demo-flow span { border: 1px solid #486475; border-radius: 8px; padding: 7px; font-size: 12px; }
   .demo-flow i { color: var(--accent); font-style: normal; }
   .day-mark { font-size: 13px; }
+  .spot-button { display:block;width:100%;text-align:left;background:transparent;color:var(--ink);border:0;border-top:1px solid var(--edge);padding:10px 2px;cursor:pointer;font:inherit;font-size:12px; }
+  .spot-button:hover,.spot-button:focus-visible {background:#155875;outline:2px solid var(--accent);}
+  .spot-button small {display:block;color:var(--dim);}
   .explore-tabs { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; margin:12px 0; }
   .explore-tabs button[aria-pressed="true"], .layer-choice[aria-pressed="true"] { background:#155875; color:#fff; }
   .feature-row { display:flex; justify-content:space-between; gap:8px; align-items:center; border-top:1px solid var(--edge);padding:9px 0;font-size:13px; }
@@ -677,6 +680,7 @@ let demoGrid = null;
 let demoDate = "";
 let demoTiming = null;
 let activeOverlay = "hotspots";
+let selectedSpotPin = null;
 const demoShift = (p, day) => day === 0 ? 0 : Math.round((Math.sin(p.rank * 1.71 + day * 2.31) * 7) + (day === 1 ? -3 : 2));
 const demoScore = (p) => Math.max(0, Math.min(100, Number(p.hotspot_score) + demoShift(p, activeDay)));
 function dayLabel(day) {
@@ -723,7 +727,7 @@ function renderDayPreview() {
   const ranked = demoTopMarks.slice().sort((a,b)=>demoScore(b)-demoScore(a));
   target.innerHTML = `<b>${dayLabel(activeDay)} · synthetic outlook</b>
     <p class="muted">Wind and swell are scenario values. The map and best marks now reflect this day. No connected forecast or tide station.</p>
-    <b>Top marks</b>${ranked.slice(0,3).map((p,i)=>`<div class="day-mark">#${i+1} · Score ${Math.round(demoScore(p))} · ${dd(p.lat,p.lon)} · ${escapeHtml((p.species||[]).join(", "))}</div>`).join("")}
+    <b>Explore 12 locations · tap to pin</b>${ranked.slice(0,12).map((p,i)=>`<button class="spot-button" type="button" data-spot="${p.rank}">#${i+1} · Mark ${p.rank} · Score ${Math.round(demoScore(p))}<small>${dd(p.lat,p.lon)} · ${escapeHtml((p.species||[]).join(", "))}</small></button>`).join("")}
     <div class="future-item"><b>Tides · example schedule</b><small>Simulated high/low times and heights near Tutukaka; not tide predictions.</small>
     ${tideTimes(activeDay).map(t=>`<div class="day-mark">${t.type} ${t.time} · ${t.height} m</div>`).join("")}</div>
     <p class="muted">Check an official tide and marine forecast before going out.</p>`;
@@ -867,8 +871,16 @@ function showFeature(name, mark = null) {
   el("feature-close").focus();
 }
 el("feature-content").addEventListener("click", (e) => {
-  const action=e.target.closest("[data-explore],[data-overlay],[data-open-forecast],#route-export,#alert-save,#pack-save,#pack-open,.remove-catch");
+  const action=e.target.closest("[data-spot],[data-explore],[data-overlay],[data-open-forecast],#route-export,#alert-save,#pack-save,#pack-open,.remove-catch");
   if (!action) return;
+  if (action.dataset.spot) {
+    const spot=marksByRank.get(Number(action.dataset.spot)); if (!spot) return;
+    if (selectedSpotPin) map.removeLayer(selectedSpotPin);
+    selectedSpotPin=L.circleMarker([spot.lat,spot.lon],{radius:12,color:"#fff",weight:3,fillColor:"#f43f5e",fillOpacity:1}).addTo(map);
+    selectedSpotPin.bindPopup(popupHtml(spot)).openPopup();
+    el("feature-panel").hidden=true; el("sheet").classList.remove("open");
+    map.flyTo([spot.lat,spot.lon],13,{duration:.8});return;
+  }
   if (action.dataset.explore) {renderExplore(action.dataset.explore);return;}
   if (action.dataset.overlay) {activeOverlay=action.dataset.overlay;applyScenario();renderExplore("layers");return;}
   if (action.hasAttribute("data-open-forecast")) {showFeature("forecast");return;}
