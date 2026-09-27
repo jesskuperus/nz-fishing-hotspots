@@ -140,8 +140,9 @@
   #cond .warn { color: #fbbf24; }
   .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--panel); color: var(--ink);
     border: 1px solid var(--edge); }
-  .leaflet-popup-content { margin: 12px 14px; width: 216px !important; font-size: 14px; }
-  @media (max-width: 699px) { .leaflet-popup-content { max-height: 175px; overflow-y: auto; overscroll-behavior: contain; } }
+  .leaflet-popup-content { margin: 12px 14px; width: 216px !important; font-size: 14px;
+    max-height: min(300px, calc(100dvh - 230px)); overflow-y: auto; overscroll-behavior: contain; }
+  @media (max-width: 699px) { .leaflet-popup-content { max-height: min(175px, calc(100dvh - 310px)); } }
   .leaflet-control-attribution { font-size: 10px; line-height: 1.3; max-width: min(90vw, 330px);
     background: rgba(7,13,20,.88) !important; color: #edf7fc !important; border-radius: 6px; padding: 3px 5px !important; }
   .leaflet-control-attribution a { color: #77d4ff !important; }
@@ -662,7 +663,7 @@ function markRow(p) {
 
   const selectMark = () => {
     el("sheet").classList.remove("open");
-    map.setView([p.lat, p.lon], 13);
+    map.setView([p.lat, p.lon], 13, {animate:false});
     L.popup({ maxWidth: 244, autoPanPaddingTopLeft: [12, 190], autoPanPaddingBottomRight: [12, 105] }).setLatLng([p.lat, p.lon]).setContent(popupHtml(p)).openOn(map);
   };
   row.addEventListener("click", (e) => {
@@ -886,6 +887,7 @@ function renderCatchList() {
 function showFeature(name, mark = null) {
   selectedMark = mark;
   const panel = el("feature-panel");
+  map.closePopup();
   const content = el("feature-content");
   if (name === "rules") content.innerHTML = RULES_HTML;
   if (name === "brain") content.innerHTML = BRAIN_HTML;
@@ -958,9 +960,9 @@ el("feature-content").addEventListener("click", (e) => {
     const spot=marksByRank.get(Number(action.dataset.spot)); if (!spot) return;
     if (selectedSpotPin) map.removeLayer(selectedSpotPin);
     selectedSpotPin=L.circleMarker([spot.lat,spot.lon],{radius:12,color:"#fff",weight:3,fillColor:colourFor(Math.max(0,Math.min(100,Number(spot.score_percentile)+demoShift(spot,activeDay)))),fillOpacity:1}).addTo(map);
-    selectedSpotPin.bindPopup(popupHtml(spot)).openPopup();
     el("feature-panel").hidden=true; el("sheet").classList.remove("open");
-    map.flyTo([spot.lat,spot.lon],13,{duration:.8});return;
+    map.setView([spot.lat,spot.lon],13,{animate:false});
+    selectedSpotPin.bindPopup(popupHtml(spot),{maxWidth:244,autoPanPaddingTopLeft:[12,190],autoPanPaddingBottomRight:[12,105]}).openPopup();return;
   }
   if (action.dataset.explore) {renderExplore(action.dataset.explore);return;}
   if (action.dataset.overlay) {activeOverlay=action.dataset.overlay;applyScenario();renderExplore("layers");return;}
