@@ -241,7 +241,7 @@
   <h1>Tutukaka Hotspots</h1>
   <span class="date" id="stamp"></span>
 </div>
-<div id="prototype">Synthetic until APIs connect · Not live or for navigation</div>
+<div id="prototype">Synthetic data &amp; invented spot names until APIs connect · Not live or for navigation</div>
 <div id="maptools">
   <div id="legend" aria-label="Hotspot colour scale"><b>Hotspot ranking</b><div class="scale"></div><div class="ends"><span>Lower</span><span>Higher</span></div></div>
   <div id="layers" role="group" aria-label="Map background">
@@ -458,7 +458,7 @@ const xmlEscape = (v) =>
     ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c]));
 
 // GPX 1.1 waypoints: what Garmin, Simrad and Furuno all import. One waypoint
-// per mark, named by rank so the order on the plotter matches the list here.
+// per mark, with its stable fictional demo name and exact coordinate.
 function buildGpx(marks, date) {
   const pts = marks.map((p) => {
     const tags = (p.species || []).join(", ");
@@ -535,7 +535,7 @@ function popupHtml(p) {
       <span>${fmt(b.current_contribution, "", 0)} / ${fmt(b.chlorophyll_contribution, "", 0)} pts</span></div>
     <p style="margin:8px 0 2px;font-size:12px"><b>Why this spot:</b> ${p.is_thermal_front ? "A temperature front, " : "Water temperature, "}${Number(p.slope_deg).toFixed(1)}° slope and ${Number(p.current_speed_ms).toFixed(2)} m/s current feed its ranking.</p>
     ${speciesHtml(p.species)}
-    <div style="margin-top:10px"><a href="https://maps.apple.com/?ll=${p.lat},${p.lon}&q=Mark%20${p.rank}"
+    <div style="margin-top:10px"><a href="https://maps.apple.com/?ll=${p.lat},${p.lon}&q=${encodeURIComponent(spotName(p))}"
       style="color:#38bdf8">Open in Maps</a> &middot;
       <button class="iconbtn popup-log" type="button" data-rank="${p.rank}">Log catch</button></div>`;
 }
@@ -630,7 +630,7 @@ function markRow(p) {
       ${speciesHtml(p.species)}
     </div>
     <button class="iconbtn copy" type="button" title="Copy coordinates">Copy</button>
-    <a class="nav" href="https://maps.apple.com/?ll=${p.lat},${p.lon}&q=Mark%20${p.rank}">Go</a>`;
+    <a class="nav" href="https://maps.apple.com/?ll=${p.lat},${p.lon}&q=${encodeURIComponent(spotName(p))}">Go</a>`;
 
   // Both formats go on the clipboard together: whichever one the plotter or
   // the person on the radio wants is already there.
@@ -680,13 +680,19 @@ const BRAIN_HTML = `<h2>Fishing brain</h2>
   <div class="future-item"><b>Inputs</b><small>Inspect the conditions dashboard under Explore.</small></div>
   <div class="future-item"><b>Decision</b><small>Combine sea state, habitat and timing to rank where and when to go; MPI rules remain an independent safety check.</small></div>
   <div class="future-item"><b>Learning loop</b><small>Catch logs stay on this device. Scores shown here are not trained on your catches.</small></div>`;
-// Working names for grid cells, generated from position and seafloor type.
-// These are distinct app labels, not established dive-site or chart names.
+// Fictional, stable demo names. Never attach a real named site to unverified coordinates.
+// Each named mark keeps its own coordinate and rank through outlooks and exports.
+const DEMO_SPOT_NAMES = [
+  "Albatross Pinnacle", "Tern's Ledge", "Bluefin Rock", "The Lantern Reef", "Whaleback Rise",
+  "Saddleback Drop", "Kelp Crown", "Seaward Spur", "Little Needle", "Mako's Edge",
+  "The Fern Shelf", "Stormbird Reef", "Rangy Rock", "The Silver Hump", "Saltwind Point",
+  "Tui's Table", "The Kōwhai Ledge", "Deepwater Steps", "Gannet Ridge", "The Long Fin",
+  "Blue Lantern", "The Outer Notch", "Blackwater Crown", "The Windward Shelf", "Little Albatross"
+];
 function spotName(p) {
-  const north = p.lat > -35.55 ? "North" : "South";
-  const offshore = p.lon > 174.72 ? "Outer" : "Inner";
-  const terrain = p.depth_m > 150 ? "Shelf" : p.depth_m > 70 ? "Ledge" : "Reef";
-  return `${offshore} ${north} ${terrain} ${p.rank}`;
+  const rank = Number(p.rank);
+  return Number.isInteger(rank) && rank > 0 && rank <= DEMO_SPOT_NAMES.length
+    ? DEMO_SPOT_NAMES[rank - 1] : `Spot ${String(p.cell_id || rank || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0,18)}`;
 }
 let targetSpecies = "Any";
 let demoTopMarks = [];
@@ -750,7 +756,7 @@ function renderDayPreview() {
   const target = el("day-preview"); if (!target) return;
   const ranked = demoTopMarks.filter(p=>targetSpecies === "Any" || (p.species||[]).includes(targetSpecies)).sort((a,b)=>demoScore(b)-demoScore(a));
   target.innerHTML = `<b>${dayLabel(activeDay)} · outlook</b>
-    <p class="muted">The map, sea state and best marks reflect your chosen day. Spot names are working labels for the marks.</p>
+    <p class="muted">The map, sea state and best marks reflect your chosen day.</p>
     <b>Explore ${Math.min(12,ranked.length)} locations · tap to pin</b>${ranked.slice(0,12).map((p,i)=>`<button class="spot-button" type="button" data-spot="${p.rank}">#${i+1} · ${escapeHtml(spotName(p))} · Score ${Math.round(demoScore(p))}<small>${dd(p.lat,p.lon)} · ${escapeHtml((p.species||[]).join(", "))}</small></button>`).join("")}
     <div class="future-item"><b>Tides</b><small>High and low times near Tutukaka.</small>
     ${tideTimes(activeDay).map(t=>`<div class="day-mark">${t.type} ${t.time} · ${t.height} m</div>`).join("")}</div>
@@ -814,7 +820,7 @@ function renderAlertResult() {
   const box=el("alert-result"); if(!box) return;
   const c=readDemo(ALERT_KEY,{threshold:80,species:"Any"});
   const match=demoTopMarks.find(p=>demoScore(p)>=Number(c.threshold) && (c.species==="Any" || (p.species||[]).includes(c.species)));
-  box.innerHTML=match ? `<b>Demo match: Mark ${match.rank}</b><small>Score ${Math.round(demoScore(match))} · ${escapeHtml(c.species)} · ${dayLabel(activeDay)}. No message will be sent.</small>`:
+  box.innerHTML=match ? `<b>Demo match: ${escapeHtml(spotName(match))}</b><small>Score ${Math.round(demoScore(match))} · ${escapeHtml(c.species)} · ${dayLabel(activeDay)}. No message will be sent.</small>`:
     `<b>No demo match</b><small>Try a lower score or another species. </small>`;
 }
 const CATCH_KEY = "tutukaka-catch-log-v1";
@@ -942,7 +948,7 @@ el("feature-content").addEventListener("click", (e) => {
   if (action.id === "pack-open") {
     const pack=readDemo(PACK_KEY,null);
     el("pack-view").innerHTML=pack ? `<p class="muted">Saved ${escapeHtml(pack.date)} · ${pack.marks.length} marks, example tides. Map tiles require signal.</p>`+
-      pack.marks.slice(0,5).map(p=>`<div class="day-mark">Mark ${p.rank} · ${dd(p.lat,p.lon)} · ${Math.round(p.score)}/100</div>`).join("") : "No saved pack yet.";return;
+      pack.marks.slice(0,5).map(p=>`<div class="day-mark">${escapeHtml(spotName(p))} · ${dd(p.lat,p.lon)} · ${Math.round(p.score)}/100</div>`).join("") : "No saved pack yet.";return;
   }
   const button = action;
   const catches = readCatches();
