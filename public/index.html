@@ -489,7 +489,7 @@ function markRow(p) {
   const selectMark = () => {
     el("sheet").classList.remove("open");
     map.setView([p.lat, p.lon], 13);
-    L.popup({ maxWidth: 244 }).setLatLng([p.lat, p.lon]).setContent(popupHtml(p)).openOn(map);
+    L.popup({ maxWidth: 244, autoPanPaddingTopLeft: [12, 190], autoPanPaddingBottomRight: [12, 105] }).setLatLng([p.lat, p.lon]).setContent(popupHtml(p)).openOn(map);
   };
   row.addEventListener("click", (e) => {
     if (!e.target.closest("a,button")) selectMark();
@@ -537,7 +537,7 @@ el("toggle").addEventListener("click", (e) => {
     L.geoJSON(data, {
       style: styleFor,
       onEachFeature: (f, lyr) =>
-        lyr.bindPopup(() => popupHtml(f.properties), { maxWidth: 244 }),
+        lyr.bindPopup(() => popupHtml(f.properties), { maxWidth: 244, autoPanPaddingTopLeft: [12, 190], autoPanPaddingBottomRight: [12, 105] }),
     }).addTo(map);
     map.fitBounds([[meta.bbox[1], meta.bbox[0]], [meta.bbox[3], meta.bbox[2]]], {
       paddingTopLeft: [6, BAR_PX],
