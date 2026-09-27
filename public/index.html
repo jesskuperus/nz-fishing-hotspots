@@ -230,6 +230,9 @@ map.attributionControl.setPosition("topright");
 function switchBase(layer) {
   if (activeBase !== layer) {
     map.removeLayer(activeBase);
+    // Leaflet can retain the removed provider credit in its control when
+    // layers swap quickly. Clear it explicitly before adding the next one.
+    map.attributionControl.removeAttribution(activeBase.options.attribution);
     layer.addTo(map);
     activeBase = layer;
   }
