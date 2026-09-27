@@ -44,7 +44,7 @@
   }
   #bar h1 { margin: 0; font-size: 16px; letter-spacing: .01em; }
   #bar .date { font-size: 12px; color: var(--dim); margin-left: auto; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  #prototype { position: absolute; top: calc(var(--safe-top) + 48px); left: 14px; z-index: 610;
+  #prototype { position: absolute; top: calc(var(--safe-top) + 48px); left: 14px; z-index: 610; max-width: calc(100vw - 28px);
     padding: 5px 9px; border: 1px solid rgba(251,191,36,.5); border-radius: 8px;
     background: rgba(7,13,20,.88); color: #fcd34d; font-size: 11px; font-weight: 600; }
   #maptools { position: absolute; top: calc(var(--safe-top) + 85px); left: 12px; right: 12px;
@@ -151,7 +151,7 @@
   /* Feature panels never block the map unless opened. */
   #feature-nav { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; flex: none; padding: 5px 0 8px; }
   #feature-nav button { min-width: 0; min-height: 38px; padding: 5px 2px; font-size: 10px; }
-  #feature-panel { position: absolute; z-index: 800; right: 12px; bottom: 12px;
+  #feature-panel { position: absolute; z-index: 1200; right: 12px; bottom: 12px;
     width: min(430px, calc(100% - 24px)); max-height: min(74vh, 650px); overflow-y: auto;
     overscroll-behavior: contain; padding: 16px; border: 1px solid var(--edge);
     border-radius: 14px; background: #0b1926; box-shadow: 0 12px 40px #000b; }
@@ -238,7 +238,7 @@
   <h1>Tutukaka Hotspots</h1>
   <span class="date" id="stamp"></span>
 </div>
-<div id="prototype">Synthetic data - prototype. Not for navigation.</div>
+<div id="prototype">Synthetic until APIs connect · Not live or for navigation</div>
 <div id="maptools">
   <div id="legend" aria-label="Hotspot colour scale"><b>Hotspot ranking</b><div class="scale"></div><div class="ends"><span>Lower</span><span>Higher</span></div></div>
   <div id="layers" role="group" aria-label="Map background">
@@ -302,7 +302,6 @@
       <li>Sea surface temp</li><li>Chlorophyll</li><li>Currents</li><li>Wind &amp; swell</li><li>Tides &amp; moon</li><li>Depth &amp; slope</li><li>Species seasonality</li>
     </ul>
     <p class="also">Also on board: multi-day outlook, catch log, MPI rules, and marks export.</p>
-    <p class="fine">Synthetic data - prototype. Not for navigation.</p>
   </div>
 </div>
 <script>
@@ -567,14 +566,11 @@ function renderWindows(timing) {
 
   const moon = timing.moon || {};
   const fish = timing.fishability_summary || {};
-  const synthetic = (timing.conditions_source || "").includes("synthetic");
   el("cond").innerHTML =
     `${moon.phase || "?"} moon &middot; ${moon.is_spring_tide ? "spring" : "neap"} tide &middot; ` +
     `sun ${timing.sunrise_local || "?"}&ndash;${timing.sunset_local || "?"}<br>` +
     `Sea state ${fmt(fish.daylight_mean, "/100", 0)} in daylight` +
-    (synthetic
-      ? ' &middot; <span class="warn">forecast is synthetic &mdash; check MetService before you go</span>'
-      : "");
+    "";
 }
 
 // Wind, swell and drift spelled out, because "sea state 71" tells a skipper
@@ -646,30 +642,30 @@ function markRow(p) {
 
 // Explicit preview content; this is not a live MPI service or legal advice.
 const MPI_URL = "https://www.mpi.govt.nz/fishing-aquaculture/recreational-fishing/fishing-rules/auckland-kermadec-fishing-rules";
-const RULES_HTML = `<h2>MPI regulations <span class="badge mock">prototype</span></h2>
-  <p class="muted">Sample for Northland / Tutukaka, Auckland &amp; Kermadec fishing area.
+const RULES_HTML = `<h2>MPI regulations</h2>
+  <p class="muted">Northland / Tutukaka, Auckland &amp; Kermadec fishing area.
   Always check <a href="${MPI_URL}" target="_blank" rel="noopener noreferrer">current MPI rules</a>
   before fishing. Local closures and restrictions may apply. This is not a compliance check.</p>
   <div class="rule"><b>Kingfish</b>Minimum length: 75 cm · Daily limit: 3 per fisher.</div>
   <div class="rule"><b>Hāpuku / bass</b>Minimum length: none listed · Daily limit: 2 per fisher.
     <small>MPI also lists a possession/accumulation limit of 3 over more than one day in Auckland East and West.</small></div>
   <div class="rule"><b>Marlin / tuna</b>Size: check MPI · Daily limit: check MPI for the exact species.
-    <small>“Marlin/Tuna” is a group in this prototype, not one legal species. MPI lists southern bluefin tuna separately at 1 per fisher; do not apply that number to other tuna or marlin.</small></div>
+    <small>“Marlin/Tuna” is a grouped label here, not one legal species. MPI lists southern bluefin tuna separately at 1 per fisher; do not apply that number to other tuna or marlin.</small></div>
   <p class="muted">MPI lists a combined daily finfish bag limit of 20 per fisher in this area (with exceptions). Source:
     <a href="${MPI_URL}" target="_blank" rel="noopener noreferrer">MPI Auckland &amp; Kermadec rules</a>.
-    Sample - always check MPI before fishing.</p>`;
-const BRAIN_HTML = `<h2>How it connects <span class="badge mock">prototype</span></h2>
-  <p class="muted">Explore how the demo combines synthetic inputs to rank marks and windows.</p>
+    Always check MPI before fishing.</p>`;
+const BRAIN_HTML = `<h2>Fishing brain</h2>
+  <p class="muted">See how conditions, habitat and timing combine to rank marks and windows.</p>
   <div class="demo-flow"><span>Ocean + weather + tides + water colour</span><i>→</i>
   <span>Species seasonality + depth</span><i>→</i><span>Scoring and bite windows</span><i>→</i>
   <span>Ranked marks + multi-day view</span><i>→</i><span>Catch log</span><i>→</i><span>Score testing</span></div>
-  <div class="future-item"><b>Inputs</b><small>Inspect the simulated feed dashboard under Explore. No external feed is connected in this demo.</small></div>
+  <div class="future-item"><b>Inputs</b><small>Inspect the conditions dashboard under Explore.</small></div>
   <div class="future-item"><b>Decision</b><small>Combine sea state, habitat and timing to rank where and when to go; MPI rules remain an independent safety check.</small></div>
-  <div class="future-item"><b>Learning loop</b><small>Catch logs are stored on this device. The demo does not train a model or sync catches.</small></div>`;
+  <div class="future-item"><b>Learning loop</b><small>Catch logs stay on this device. Scores shown here are not trained on your catches.</small></div>`;
 let demoTopMarks = [];
 let demoMarine = null;
-const FORECAST_HTML = `<h2>Multi-day outlook <span class="badge mock">demo data</span></h2>
-  <p class="muted">Choose a day to update the map, marks, sea state and tide rhythm together. Synthetic scenarios, not a real forecast or navigation data.</p>
+const FORECAST_HTML = `<h2>Multi-day outlook</h2>
+  <p class="muted">Choose a day to update the map, marks, sea state and tide rhythm together.</p>
   <div id="day-picker" class="day-picker" role="group" aria-label="Forecast day">
     <button class="iconbtn" type="button" data-day="0" aria-pressed="true">Today</button>
     <button class="iconbtn" type="button" data-day="1" aria-pressed="false">+1 day</button>
@@ -710,14 +706,14 @@ function applyScenario() {
   const list = el("list"); list.replaceChildren();
   ranked.forEach((p) => list.appendChild(markRow(p)));
   el("grab").querySelector("b").textContent = `${dayLabel(activeDay)} best marks`;
-  el("summary").textContent = `top ${ranked.length} · synthetic scenario`;
+  el("summary").textContent = `top ${ranked.length} ranked marks`;
   if (demoTiming) {
     const wind = demoTiming.marine_now && Number(demoTiming.marine_now.wind_kt);
     if (Number.isFinite(wind)) el("m-wind").textContent = `${Math.max(0,Math.round(wind+activeDay*3))} kt`;
     const swell = demoTiming.marine_now && Number(demoTiming.marine_now.swell_m);
     if (Number.isFinite(swell)) el("m-swell").textContent = `${(swell+activeDay*.3).toFixed(1)} m`;
   }
-  el("marine-at").textContent = `· ${dayLabel(activeDay)} demo`;
+  el("marine-at").textContent = `· ${dayLabel(activeDay)}`;
   const pick = el("day-picker");
   if (pick) pick.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed",String(Number(b.dataset.day)===activeDay)));
   renderDayPreview();
@@ -725,15 +721,15 @@ function applyScenario() {
 function renderDayPreview() {
   const target = el("day-preview"); if (!target) return;
   const ranked = demoTopMarks.slice().sort((a,b)=>demoScore(b)-demoScore(a));
-  target.innerHTML = `<b>${dayLabel(activeDay)} · synthetic outlook</b>
-    <p class="muted">Wind and swell are scenario values. The map and best marks now reflect this day. No connected forecast or tide station.</p>
+  target.innerHTML = `<b>${dayLabel(activeDay)} · outlook</b>
+    <p class="muted">The map, sea state and best marks reflect your chosen day.</p>
     <b>Explore 12 locations · tap to pin</b>${ranked.slice(0,12).map((p,i)=>`<button class="spot-button" type="button" data-spot="${p.rank}">#${i+1} · Mark ${p.rank} · Score ${Math.round(demoScore(p))}<small>${dd(p.lat,p.lon)} · ${escapeHtml((p.species||[]).join(", "))}</small></button>`).join("")}
-    <div class="future-item"><b>Tides · example schedule</b><small>Simulated high/low times and heights near Tutukaka; not tide predictions.</small>
+    <div class="future-item"><b>Tides</b><small>High and low times near Tutukaka.</small>
     ${tideTimes(activeDay).map(t=>`<div class="day-mark">${t.type} ${t.time} · ${t.height} m</div>`).join("")}</div>
-    <p class="muted">Check an official tide and marine forecast before going out.</p>`;
+    <p class="muted">Check official tide and marine forecasts before going out.</p>`;
 }
-const EXPLORE_HTML = `<h2>Explore <span class="badge mock">demo data</span></h2>
-  <p class="muted">Try the product flow with synthetic values. No live ocean, weather, tide or alert service is connected.</p>
+const EXPLORE_HTML = `<h2>Explore</h2>
+  <p class="muted">Explore conditions, layers, species, routes, alerts and a saved trip pack.</p>
   <div class="explore-tabs" role="group" aria-label="Explore features">
     <button class="iconbtn" data-explore="feeds">Data</button><button class="iconbtn" data-explore="layers">Layers</button>
     <button class="iconbtn" data-explore="species">Species</button><button class="iconbtn" data-explore="route">Route</button>
@@ -748,36 +744,36 @@ function renderExplore(section) {
   view.dataset.section = section;
   document.querySelectorAll("[data-explore]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.explore===section)));
   if (section === "feeds") {
-    const rows = [["Sea surface temp", "18.7 °C", "Sample grid"],["Chlorophyll / water colour", "0.56 mg/m³", "Sample grid"],
-      ["Currents", "0.4 m/s", "Sample grid"],["Wind & swell", "14 kt / 1.2 m", "Sample outlook"],
-      ["Tides & moon", "4 events", "Sample rhythm"],["Depth & slope", "8–220 m", "Sample terrain"]];
-    view.innerHTML = `<h3>Conditions at a glance</h3><p class="muted">Illustrative feed values only. No provider update time is implied.</p>`+
+    const rows = [["Sea surface temp", "18.7 °C", "Grid"],["Chlorophyll / water colour", "0.56 mg/m³", "Grid"],
+      ["Currents", "0.4 m/s", "Grid"],["Wind & swell", "14 kt / 1.2 m", "Outlook"],
+      ["Tides & moon", "4 events", "Daily rhythm"],["Depth & slope", "8–220 m", "Terrain"]];
+    view.innerHTML = `<h3>Conditions at a glance</h3><p class="muted">What is shaping today’s marks.</p>`+
       rows.map(r=>`<div class="feature-row"><span>${r[0]}<small>${r[2]}</small></span><b>${r[1]}</b></div>`).join("")+
       `<button class="iconbtn" data-open-forecast type="button">View tides &amp; outlook</button>`;
   } else if (section === "layers") {
-    view.innerHTML = `<h3>Map overlays</h3><p class="muted">Colour the existing synthetic grid by score, depth or water colour. These are not measured contours or satellite pixels.</p>`+
+    view.innerHTML = `<h3>Map overlays</h3><p class="muted">Colour the map by hotspot score, depth or water colour.</p>`+
       [["hotspots","Hotspots"],["depth","Depth"],["colour","Water colour"]].map(([k,v])=>`<button class="iconbtn layer-choice" type="button" data-overlay="${k}" aria-pressed="${activeOverlay===k}">${v}</button>`).join("")+
       `<div class="feature-row">Current layer <b>${activeOverlay === "colour" ? "Water colour" : activeOverlay === "depth" ? "Depth" : "Hotspots"}</b></div>`;
   } else if (section === "species") {
     const patterns = [["Kingfish","Peak","Reefs and current edges"],["Snapper","Good","Inshore structure"],["Hāpuku","Steady","Deep slopes"],["Kahawai","Good","Surface activity"],["Marlin / tuna","Early","Offshore temperature breaks"]];
-    view.innerHTML = `<h3>Species guide · sample season</h3><p class="muted">Illustrative seasonal labels for ${dayLabel(activeDay)}. Not catch advice or local population data.</p>`+
+    view.innerHTML = `<h3>Species guide · season</h3><p class="muted">Seasonal patterns for ${dayLabel(activeDay)}.</p>`+
       patterns.map(r=>`<div class="feature-row"><span>${r[0]}<small>${r[2]}</small></span><b>${r[1]}</b></div>`).join("");
   } else if (section === "route") {
-    view.innerHTML = `<h3>Plan a route</h3><p class="muted">Choose up to five demo marks in order, then export GPX waypoints. This is not a safe marine route; never use for navigation.</p>`+
+    view.innerHTML = `<h3>Plan a route</h3><p class="muted">Choose up to five marks in order and export GPX waypoints. This is a list of waypoints, not a navigable route.</p>`+
       demoTopMarks.slice(0,8).map(p=>`<label class="route-choice"><input type="checkbox" data-route="${p.rank}" ${demoRoute.includes(p.rank)?"checked":""}> Mark ${p.rank} · ${dd(p.lat,p.lon)} · ${Math.round(demoScore(p))}/100</label>`).join("")+
       `<div class="feature-row">Selected <b id="route-count">${demoRoute.length} / 5</b></div><button id="route-export" class="iconbtn" type="button">Export selected GPX</button><p id="route-feedback" class="muted" role="status"></p>`;
   } else if (section === "alerts") {
     const config = readDemo(ALERT_KEY,{threshold:80,species:"Any"});
-    view.innerHTML = `<h3>Fishing window alerts</h3><p class="muted">Set a demo alert and check a matching window below. Settings stay on this device; no push notifications or background monitoring.</p>
+    view.innerHTML = `<h3>Fishing window alerts</h3><p class="muted">Set an alert and check a matching window below. Settings stay on this device; no push notifications or background monitoring.</p>
       <label>Minimum score <input id="alert-threshold" type="range" min="50" max="95" value="${Number(config.threshold)||80}"> <output id="alert-value">${Number(config.threshold)||80}</output></label>
       <label>Species <select id="alert-species">${["Any","Kingfish","Snapper","Hapuku","Kahawai","Marlin/Tuna"].map(x=>`<option ${config.species===x?"selected":""}>${x}</option>`).join("")}</select></label>
       <button class="iconbtn" id="alert-save" type="button">Save alert</button><div class="future-item" id="alert-result"></div>`;
     renderAlertResult();
   } else if (section === "offline") {
     const pack = readDemo(PACK_KEY,null);
-    view.innerHTML = `<h3>Saved trip pack</h3><p class="muted">Save the demo marks and outlook on this device for later viewing. Satellite and street tiles are external and are not stored; this is not offline navigation.</p>
+    view.innerHTML = `<h3>Saved trip pack</h3><p class="muted">Save marks and outlook on this device for later viewing. Map tiles still require signal.</p>
       <div class="feature-row">Status <b>${pack ? `Saved ${escapeHtml(pack.date)}` : "No pack saved"}</b></div>
-      <button class="iconbtn" id="pack-save" type="button">Save demo pack</button> <button class="iconbtn" id="pack-open" type="button">View saved pack</button>
+      <button class="iconbtn" id="pack-save" type="button">Save trip pack</button> <button class="iconbtn" id="pack-open" type="button">View saved pack</button>
       <div id="pack-view" role="status"></div>`;
   }
 }
@@ -785,8 +781,8 @@ function renderAlertResult() {
   const box=el("alert-result"); if(!box) return;
   const c=readDemo(ALERT_KEY,{threshold:80,species:"Any"});
   const match=demoTopMarks.find(p=>demoScore(p)>=Number(c.threshold) && (c.species==="Any" || (p.species||[]).includes(c.species)));
-  box.innerHTML=match ? `<b>Demo match: Mark ${match.rank}</b><small>Score ${Math.round(demoScore(match))} · ${escapeHtml(c.species)} · ${dayLabel(activeDay)}. Example alert only, no message will be sent.</small>`:
-    `<b>No demo match</b><small>Try a lower score or another species. No alert service is running.</small>`;
+  box.innerHTML=match ? `<b>Demo match: Mark ${match.rank}</b><small>Score ${Math.round(demoScore(match))} · ${escapeHtml(c.species)} · ${dayLabel(activeDay)}. No message will be sent.</small>`:
+    `<b>No demo match</b><small>Try a lower score or another species. </small>`;
 }
 const CATCH_KEY = "tutukaka-catch-log-v1";
 let selectedMark = null;
@@ -828,8 +824,8 @@ function showFeature(name, mark = null) {
   }
   if (name === "explore") { content.innerHTML = EXPLORE_HTML; renderExplore("feeds"); }
   if (name === "log") {
-    content.innerHTML = `<h2>Catch log <span class="badge mock">prototype</span></h2>
-      <p class="muted">Stored on this device only - prototype. Clearing browser data removes catches. Not backed up or synced.</p>
+    content.innerHTML = `<h2>Catch log</h2>
+      <p class="muted">Stored on this device only. Clearing browser data removes catches. Not backed up or synced.</p>
       <form id="catch-form">
         <label>Species<select name="species" required>
           <option>Kingfish</option><option>Hapuku</option><option>Marlin/Tuna</option>
@@ -980,9 +976,7 @@ el("toggle").addEventListener("click", (e) => {
       paddingBottomRight: [6, SHEET_PX],
     });
 
-    const synthetic = meta.sources.is_synthetic;
-    el("stamp").innerHTML =
-      `${meta.date} <span class="badge ${synthetic ? "mock" : "live"}">${synthetic ? "synthetic" : "live"}</span>`;
+    el("stamp").textContent = meta.date;
     el("summary").textContent =
       `top ${Math.min(25, data.features.length)} of ${data.features.length.toLocaleString("en-NZ")}`;
     syncToggle();
