@@ -193,10 +193,14 @@
   .route-choice {display:block;padding:8px 0;border-top:1px solid var(--edge);font-size:12px;}
   #explore-view input,#explore-view select {accent-color:var(--accent);margin:8px 4px 8px 0;}
   #explore-view label:not(.route-choice) {display:block;padding:6px 0;}
-  /* Attribution must remain available but not turn into a strip across the map. */
-  .leaflet-control-attribution { width:max-content;max-width:min(190px,48vw);font-size:8px !important;
-    line-height:1.1 !important;white-space:normal;overflow-wrap:anywhere;background:rgba(7,13,20,.86) !important;
-    border:1px solid var(--edge);border-radius:6px;padding:3px 5px !important; }
+  /* Attribution must remain available but not turn into a strip across the map.
+     Default is a one-line corner chip (Esri credit stays visible); a tap expands
+     the full credits, a second tap on the text collapses them again. */
+  .leaflet-control-attribution { width:max-content;max-width:min(180px,46vw);font-size:8px !important;
+    line-height:1.1 !important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    background:rgba(7,13,20,.86) !important;
+    border:1px solid var(--edge);border-radius:6px;padding:2px 5px !important;cursor:pointer; }
+  .leaflet-control-attribution.open { white-space:normal;overflow-wrap:anywhere;max-width:min(240px,70vw); }
   .leaflet-bottom .leaflet-control-attribution {margin-right:8px;margin-bottom:208px;}
   @media (min-width:700px) { .leaflet-bottom .leaflet-control-attribution {margin-bottom:9px;} }
 
@@ -358,6 +362,12 @@ let tileErrors = 0;
 let streetErrors = 0;
 satellite.addTo(map);
 map.attributionControl.setPosition("bottomright");
+const attrChip = map.attributionControl.getContainer();
+attrChip.title = "Map credits - tap to expand";
+attrChip.addEventListener("click", (e) => {
+  if (!attrChip.classList.contains("open")) { attrChip.classList.add("open"); e.preventDefault(); }
+  else if (e.target === attrChip) { attrChip.classList.remove("open"); }
+});
 
 function applyLabels() {
   const want = labelsOn && activeBase === satellite;
@@ -732,9 +742,12 @@ function applyScenario() {
     const p = f.properties;
     if (activeOverlay === "depth") return {fillColor: p.depth_m < 50 ? "#67e8f9" : p.depth_m < 120 ? "#2563eb" : "#172554", fillOpacity:.52, color:"#071423",weight:.12};
     if (activeOverlay === "colour") return {fillColor: Number(p.chlorophyll_mg_m3) > .7 ? "#4ade80" : Number(p.chlorophyll_mg_m3) > .4 ? "#eab308" : "#2563eb", fillOpacity:.55,color:"#071423",weight:.12};
-    const score = demoScore(p);
+    // Score opacity off the (shifted) percentile, not the raw score: the
+    // percentile is uniform, so ordinary water stays faint and only the
+    // standout few percent go vivid - the flat raw-score wash read as murk.
+    const shifted = Math.max(0, Math.min(100, Number(p.score_percentile) + demoShift(p, activeDay)));
     const selected = targetSpecies === "Any" || (p.species||[]).includes(targetSpecies);
-    return {...styleFor(f), fillColor: colourFor(Math.max(0,Math.min(100,Number(p.score_percentile)+demoShift(p,activeDay)))),fillOpacity:selected ? .20+.68*emph(score) : .035};
+    return {...styleFor(f), fillColor: colourFor(shifted), fillOpacity: selected ? 0.14 + 0.70 * emph(shifted) : 0.035};
   });
   const ranked = demoTopMarks.filter(p => targetSpecies === "Any" || (p.species||[]).includes(targetSpecies)).sort((a,b) => demoScore(b)-demoScore(a));
   const list = el("list"); list.replaceChildren();
