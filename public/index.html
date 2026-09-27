@@ -123,6 +123,7 @@
   .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--panel); color: var(--ink);
     border: 1px solid var(--edge); }
   .leaflet-popup-content { margin: 12px 14px; width: 216px !important; font-size: 14px; }
+  @media (max-width: 699px) { .leaflet-popup-content { max-height: 175px; overflow-y: auto; overscroll-behavior: contain; } }
   .leaflet-control-attribution { font-size: 10px; line-height: 1.3; max-width: min(90vw, 330px);
     background: rgba(7,13,20,.88) !important; color: #edf7fc !important; border-radius: 6px; padding: 3px 5px !important; }
   .leaflet-control-attribution a { color: #77d4ff !important; }
