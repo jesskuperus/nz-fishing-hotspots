@@ -872,7 +872,7 @@ el("feature-content").addEventListener("click", (e) => {
   if (action.dataset.spot) {
     const spot=marksByRank.get(Number(action.dataset.spot)); if (!spot) return;
     if (selectedSpotPin) map.removeLayer(selectedSpotPin);
-    selectedSpotPin=L.circleMarker([spot.lat,spot.lon],{radius:12,color:"#fff",weight:3,fillColor:"#f43f5e",fillOpacity:1}).addTo(map);
+    selectedSpotPin=L.circleMarker([spot.lat,spot.lon],{radius:12,color:"#fff",weight:3,fillColor:colourFor(Math.max(0,Math.min(100,Number(spot.score_percentile)+demoShift(spot,activeDay)))),fillOpacity:1}).addTo(map);
     selectedSpotPin.bindPopup(popupHtml(spot)).openPopup();
     el("feature-panel").hidden=true; el("sheet").classList.remove("open");
     map.flyTo([spot.lat,spot.lon],13,{duration:.8});return;
