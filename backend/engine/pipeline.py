@@ -16,7 +16,7 @@ from backend.data_ingestion.bathymetry_loader import load_bathymetry
 from backend.data_ingestion.chlorophyll import fetch_chlorophyll
 from backend.data_ingestion.coastline import land_mask
 from backend.data_ingestion.ocean_fetcher import fetch_ocean_field
-from backend.engine import features, scoring
+from backend.engine import features, scoring, species
 from backend.engine.grid import Grid, build_grid
 from backend.timing.windows import build_windows
 
@@ -101,7 +101,9 @@ def run_pipeline(
         ocean_source=ocean.source,
         bathy_source=bathy.source,
         chl_source=chl.source,
-        timing=_timing_block(date, grid),
+        timing=_timing_block(
+            date, grid, ocean.current_u_ms, ocean.current_v_ms
+        ),
         min_score=min_score,
     )
 
@@ -176,6 +178,13 @@ def _feature_rows(grid: Grid, keep: np.ndarray, f: dict) -> list[dict]:
                     "chlorophyll_mg_m3": _round(f["chl"][i, j], 3),
                     "current_bearing_deg": _bearing(f["u"][i, j], f["v"][i, j]),
                     "is_thermal_front": bool(f["scored"]["is_thermal_front"][i, j]),
+                    # Labels only: what to rig for on this ground. Never an
+                    # input to the score.
+                    "species": species.tags_for(
+                        _round(f["depth"][i, j], 1),
+                        _round(f["sst"][i, j], 2),
+                        bool(f["scored"]["is_thermal_front"][i, j]),
+                    ),
                     "score_breakdown": {
                         "temp_gradient_weight": _round(
                             f["scored"]["temp_gradient_weight"][i, j], 3
@@ -324,7 +333,12 @@ def _total_weight() -> float:
     return total or 1.0
 
 
-def _timing_block(date: dt.date, grid: Grid) -> dict:
+def _timing_block(
+    date: dt.date,
+    grid: Grid,
+    current_u: np.ndarray | None = None,
+    current_v: np.ndarray | None = None,
+) -> dict:
     """Bite windows and fishability for the day, for the whole box.
 
     Deliberately separate from the cell scores: tide, light, moon and wind
@@ -345,10 +359,15 @@ def _timing_block(date: dt.date, grid: Grid) -> dict:
         local_h = (hour["utc_hour"] + 12) % 24
         hour["wind_kt"] = conditions.wind_kt[local_h]
         hour["wind_dir"] = weather.compass_point(conditions.wind_dir_deg[local_h])
+        hour["wind_dir_deg"] = conditions.wind_dir_deg[local_h]
         hour["swell_m"] = conditions.swell_m[local_h]
+        hour["swell_period_s"] = conditions.swell_period_s[local_h]
+        hour["swell_dir"] = weather.compass_point(conditions.swell_dir_deg[local_h])
+        hour["swell_dir_deg"] = conditions.swell_dir_deg[local_h]
         hour["fishability"] = conditions.fishability[local_h]
 
     windows["available"] = True
+    windows["marine_now"] = _marine_summary(windows["hours"], current_u, current_v)
     windows["conditions_source"] = conditions.source
     windows["conditions_notes"] = conditions.notes
     windows["fishability_summary"] = {
@@ -359,6 +378,44 @@ def _timing_block(date: dt.date, grid: Grid) -> dict:
         ),
     }
     return windows
+
+
+def _marine_summary(
+    hours: list[dict],
+    current_u: "np.ndarray | None" = None,
+    current_v: "np.ndarray | None" = None,
+) -> dict:
+    """The single line a skipper reads before deciding to launch.
+
+    Wind and swell come from the hour nearest local noon, which is when most
+    trailer boats are actually out. Drift is the box-mean surface current --
+    the map already carries it per cell, but the number worth knowing at the
+    ramp is how fast you will be pushed off a mark anywhere out there.
+    """
+    noon = min(hours, key=lambda h: abs(((h["utc_hour"] + 12) % 24) - 12))
+
+    drift_ms = drift_deg = None
+    if current_u is not None and current_v is not None:
+        # Vector mean, not a mean of speeds: averaging bearings the naive way
+        # turns a northward and a southward set into a nonsense easterly.
+        u_bar = float(np.nanmean(current_u))
+        v_bar = float(np.nanmean(current_v))
+        drift_ms = float(np.hypot(u_bar, v_bar))
+        drift_deg = _bearing(u_bar, v_bar)
+
+    return {
+        "at_local": noon.get("local"),
+        "wind_kt": noon.get("wind_kt"),
+        "wind_dir": noon.get("wind_dir"),
+        "wind_dir_deg": noon.get("wind_dir_deg"),
+        "swell_m": noon.get("swell_m"),
+        "swell_period_s": noon.get("swell_period_s"),
+        "swell_dir": noon.get("swell_dir"),
+        "drift_kt": None if drift_ms is None else round(drift_ms * 1.94384, 2),
+        "drift_dir": None if drift_deg is None else weather.compass_point(drift_deg),
+        "drift_dir_deg": drift_deg,
+        "fishability": noon.get("fishability"),
+    }
 
 
 def to_geodataframe(geojson: dict):

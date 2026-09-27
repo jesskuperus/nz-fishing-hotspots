@@ -125,3 +125,18 @@ python scripts/calibrate.py
 The score's weights have never been checked against a fish. Twenty logged
 trips is the point at which `calibrate.py` will tell you whether the map is
 finding anything real. Nothing else on this list changes that.
+
+
+## Swell period and direction (optional, free)
+
+The drawer's swell tile shows height, period and direction. Period and
+direction come from Open-Meteo's marine endpoint (`wave_period`,
+`wave_direction`) — no key, no account. If that endpoint is unreachable the
+run falls back to the synthetic forecast and the whole drawer is stamped
+`SYNTHETIC` in amber. Nothing to set up; this note is here so the field
+origins are on the record.
+
+**Still unverified in this environment:** every live ocean and weather API
+returns 403 through the sandbox proxy used to build this, so only the
+synthetic paths have been exercised end to end. The first real run from a
+machine with open outbound HTTPS is the one that proves the live path.

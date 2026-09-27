@@ -268,3 +268,36 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def test_species_tags_are_labels_not_scores():
+    """Depth and temperature pick the badge; nothing else may."""
+    from backend.engine import species
+
+    assert species.tags_for(170, 19.0)[0] == "Kingfish", "the kingfish shelf"
+    assert species.tags_for(30, 18.0)[0] == "Snapper", "inshore is snapper ground"
+    assert "Marlin/Tuna" in species.tags_for(300, 19.5), "warm deep water"
+    assert "Marlin/Tuna" not in species.tags_for(300, 16.0), "too cold for gamefish"
+    assert species.tags_for(None, 18.0) == [], "no guessing without a depth"
+    assert len(species.tags_for(170, 19.0)) <= species.MAX_TAGS
+
+
+def test_front_widens_the_gamefish_band_slightly():
+    """A temperature break holds bait, so the SST bar drops a touch on one."""
+    from backend.engine import species
+
+    just_under = 18.3
+    assert "Marlin/Tuna" not in species.tags_for(300, just_under, False)
+    assert "Marlin/Tuna" in species.tags_for(300, just_under, True)
+
+
+def test_forecast_carries_swell_period_and_direction():
+    """The drawer needs the shape of the swell, not just its height."""
+    import datetime as dt
+
+    from backend.data_ingestion import weather
+
+    c = weather.fetch_conditions(dt.date(2026, 1, 15))
+    assert len(c.swell_period_s) == 24 and len(c.swell_dir_deg) == 24
+    assert all(3.0 <= p <= 20.0 for p in c.swell_period_s), "plausible wave periods"
+    assert all(0.0 <= d < 360.0 for d in c.swell_dir_deg)

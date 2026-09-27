@@ -186,6 +186,44 @@ and 1.20 mg/m³, falling away in barren blue water below and in murky bloom
 water above. `WEIGHT_CHLOROPHYLL=0` recovers the brief's original formula
 exactly.
 
+## Taking marks with you
+
+The drawer's **Export marks** button downloads the day's top 25 as a GPX 1.1
+waypoint file — the format Garmin, Simrad and Furuno all import. Each waypoint
+carries its score, depth, water temperature and species badges in the
+description, and is named `M<rank> <score>` so the plotter list comes out in
+the same order as the app.
+
+**Copy** on any mark puts both coordinate formats on the clipboard at once:
+
+```
+-35.3621, 174.6395
+35°21'43.6"S 174°38'22.2"E
+```
+
+Decimal degrees for pasting into an app, degrees/minutes/seconds for reading
+over the radio or punching into an older plotter.
+
+These are modelled marks on a modelled seabed. **Do not navigate on them.**
+
+## Species badges
+
+Each mark carries up to two species labels, from `backend/engine/species.py`:
+
+| Badge | Depth | Water temp |
+| --- | --- | --- |
+| Snapper | 0–60 m | 12–24 °C |
+| Kahawai | 10–90 m | 13–24 °C |
+| Kingfish | 150–200 m | 15–24 °C |
+| Hapuku | 180–600 m | 10–19 °C |
+| Marlin/Tuna | 80 m+ | 18.5 °C+ |
+
+A cell on a thermal front gets 0.4 °C of allowance, because a temperature
+break holds bait. The badges are **labels, never inputs** — a mark does not
+score higher because we can name a fish on it. The bands are working rules of
+thumb for this coast, not catch-calibrated, and they ignore season. Read a
+badge as "rig for this", not "this is what is there".
+
 ## Calibration — the only thing that makes this accurate
 
 Every weight here is a guess, mine or the brief's. Logging trips is what

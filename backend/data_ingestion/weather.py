@@ -28,11 +28,24 @@ COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
 
 
 @dataclass
+class _Forecast:
+    """The raw hourly series, before fishability is derived from them."""
+
+    wind_kt: list[float]
+    wind_dir_deg: list[float]
+    swell_m: list[float]
+    swell_period_s: list[float]
+    swell_dir_deg: list[float]
+
+
+@dataclass
 class MarineConditions:
     hours: list[str]
     wind_kt: list[float]
     wind_dir_deg: list[float]
     swell_m: list[float]
+    swell_period_s: list[float]
+    swell_dir_deg: list[float]
     fishability: list[float]
     source: str
     notes: list[str] = field(default_factory=list)
@@ -65,21 +78,28 @@ def fishability(wind_kt: float, swell_m: float) -> float:
     return round(min(w, s) * 100.0, 1)
 
 
-def _synthetic_forecast(date: dt.date) -> tuple[list[float], list[float], list[float]]:
+def _synthetic_forecast(date: dt.date) -> "_Forecast":
     """A plausible, gently varying day. Deterministic per date."""
     seed = date.toordinal()
     base_wind = 8.0 + 7.0 * (0.5 + 0.5 * math.sin(seed / 3.3))
     base_dir = (seed * 37) % 360
     base_swell = 0.7 + 0.9 * (0.5 + 0.5 * math.sin(seed / 5.1))
+    # Swell arrives from its own quarter and at its own period: a long-period
+    # ground swell from the east is a different day out to a short wind chop
+    # from the same height, so the two are carried separately.
+    base_swell_dir = (seed * 53 + 70) % 360
+    base_period = 7.0 + 4.0 * (0.5 + 0.5 * math.sin(seed / 4.7))
 
-    wind, direction, swell = [], [], []
+    wind, direction, swell, period, swell_dir = [], [], [], [], []
     for h in range(24):
         # Afternoon sea breeze: wind builds through the day and drops at dusk.
         diurnal = 1.0 + 0.35 * math.sin(2 * math.pi * (h - 8) / 24.0)
         wind.append(round(base_wind * diurnal, 1))
         direction.append(round((base_dir + 8 * math.sin(h / 6.0)) % 360, 1))
         swell.append(round(base_swell + 0.15 * math.sin(2 * math.pi * (h - 3) / 24.0), 2))
-    return wind, direction, swell
+        period.append(round(base_period + 0.6 * math.sin(h / 7.0), 1))
+        swell_dir.append(round((base_swell_dir + 5 * math.sin(h / 9.0)) % 360, 1))
+    return _Forecast(wind, direction, swell, period, swell_dir)
 
 
 def fetch_conditions(
@@ -98,38 +118,42 @@ def fetch_conditions(
 
     if config.USE_LIVE_WEATHER:
         try:
-            wind, direction, swell = _fetch_live(date, lat, lon)
+            f = _fetch_live(date, lat, lon)
             return MarineConditions(
                 hours=hours,
-                wind_kt=wind,
-                wind_dir_deg=direction,
-                swell_m=swell,
-                fishability=[fishability(w, s) for w, s in zip(wind, swell)],
+                wind_kt=f.wind_kt,
+                wind_dir_deg=f.wind_dir_deg,
+                swell_m=f.swell_m,
+                swell_period_s=f.swell_period_s,
+                swell_dir_deg=f.swell_dir_deg,
+                fishability=[
+                    fishability(w, s) for w, s in zip(f.wind_kt, f.swell_m)
+                ],
                 source="open-meteo-forecast+marine",
             )
         except Exception as exc:  # noqa: BLE001 - never fail the daily run
             log.warning("Weather fetch failed (%s); using synthetic", exc)
             notes.append(f"live forecast unavailable: {exc}")
 
-    wind, direction, swell = _synthetic_forecast(date)
+    f = _synthetic_forecast(date)
     notes.append(
         "SYNTHETIC forecast - a shaped guess, not a marine forecast. "
         "Check MetService or Predictwind before you leave the ramp."
     )
     return MarineConditions(
         hours=hours,
-        wind_kt=wind,
-        wind_dir_deg=direction,
-        swell_m=swell,
-        fishability=[fishability(w, s) for w, s in zip(wind, swell)],
+        wind_kt=f.wind_kt,
+        wind_dir_deg=f.wind_dir_deg,
+        swell_m=f.swell_m,
+        swell_period_s=f.swell_period_s,
+        swell_dir_deg=f.swell_dir_deg,
+        fishability=[fishability(w, s) for w, s in zip(f.wind_kt, f.swell_m)],
         source="synthetic-mock-weather",
         notes=notes,
     )
 
 
-def _fetch_live(
-    date: dt.date, lat: float, lon: float
-) -> tuple[list[float], list[float], list[float]]:
+def _fetch_live(date: dt.date, lat: float, lon: float) -> "_Forecast":
     import httpx
 
     params = {
@@ -144,7 +168,7 @@ def _fetch_live(
     marine_params = {
         "latitude": round(lat, 4),
         "longitude": round(lon, 4),
-        "hourly": "wave_height",
+        "hourly": "wave_height,wave_period,wave_direction",
         "start_date": date.isoformat(),
         "end_date": date.isoformat(),
         "timezone": "Pacific/Auckland",
@@ -158,8 +182,17 @@ def _fetch_live(
 
         sea = client.get(config.OPEN_METEO_MARINE_URL, params=marine_params)
         sea.raise_for_status()
-        swell = [float(v or 0.0) for v in sea.json()["hourly"]["wave_height"][:24]]
+        marine = sea.json()["hourly"]
+        swell = [float(v or 0.0) for v in marine["wave_height"][:24]]
+        period = [float(v or 0.0) for v in marine.get("wave_period", [])[:24]]
+        swell_dir = [float(v or 0.0) for v in marine.get("wave_direction", [])[:24]]
 
     if len(wind) < 24 or len(swell) < 24:
         raise ValueError("incomplete hourly forecast")
-    return wind, direction, swell
+    # Period and direction are a bonus, not a requirement: an older marine
+    # endpoint that only returns height should still give us a forecast.
+    if len(period) < 24:
+        period = [0.0] * 24
+    if len(swell_dir) < 24:
+        swell_dir = [0.0] * 24
+    return _Forecast(wind, direction, swell, period, swell_dir)
