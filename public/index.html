@@ -30,7 +30,22 @@
     display: flex; align-items: baseline; gap: 10px;
   }
   #bar h1 { margin: 0; font-size: 16px; letter-spacing: .01em; }
-  #bar .date { font-size: 12px; color: var(--dim); margin-left: auto; font-variant-numeric: tabular-nums; }
+  #bar .date { font-size: 12px; color: var(--dim); margin-left: auto; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #prototype { position: absolute; top: calc(var(--safe-top) + 48px); left: 14px; z-index: 610;
+    padding: 5px 9px; border: 1px solid rgba(251,191,36,.5); border-radius: 8px;
+    background: rgba(7,13,20,.88); color: #fcd34d; font-size: 11px; font-weight: 600; }
+  #maptools { position: absolute; top: calc(var(--safe-top) + 85px); left: 12px; right: 12px;
+    z-index: 610; display: flex; justify-content: space-between; align-items: start; gap: 10px; pointer-events: none; }
+  #legend, #layers { background: rgba(7,13,20,.9); border: 1px solid rgba(220,235,245,.45);
+    border-radius: 10px; box-shadow: 0 3px 12px rgba(0,0,0,.35); pointer-events: auto; }
+  #legend { width: 148px; padding: 8px 10px; font-size: 11px; }
+  #legend b { display: block; margin-bottom: 5px; }
+  #legend .scale { height: 7px; border-radius: 99px; background: linear-gradient(90deg,#fde68a,#f97316,#dc2626,#9d174d,#581c87); }
+  #legend .ends { display: flex; justify-content: space-between; margin-top: 3px; color: #d2e5ef; }
+  #layers { display: flex; padding: 3px; }
+  #layers button { border: 0; border-radius: 7px; background: transparent; color: #d2e5ef;
+    min-height: 44px; padding: 0 9px; font: inherit; font-size: 12px; cursor: pointer; }
+  #layers button[aria-pressed="true"] { background: #155875; color: white; }
   .badge { display: inline-block; padding: 1px 6px; border-radius: 99px; font-size: 10px;
     letter-spacing: .06em; text-transform: uppercase; border: 1px solid currentColor; }
   .badge.mock { color: #fbbf24; } .badge.live { color: #4ade80; }
@@ -41,14 +56,14 @@
     background: var(--panel); border-top: 1px solid var(--edge);
     border-radius: 16px 16px 0 0; backdrop-filter: blur(10px);
     padding: 0 14px calc(var(--safe-bottom) + 12px);
-    max-height: 62%; display: flex; flex-direction: column;
+    max-height: min(70%, 620px); display: flex; flex-direction: column;
     transform: translateY(calc(100% - 96px)); transition: transform .25s ease;
   }
   #sheet.open { transform: translateY(0); }
   /* Fully stowed: just the handle bar, so the map is never obscured. */
-  #sheet.stowed { transform: translateY(calc(100% - 30px)); }
-  #sheet.stowed #grab .row, #sheet.stowed #windows,
-  #sheet.stowed #list, #sheet.stowed #marine { display: none; }
+  #sheet.stowed { transform: translateY(calc(100% - 76px)); }
+  #sheet.stowed #grab .row + .row, #sheet.stowed #windows,
+  #sheet.stowed #list, #sheet.stowed #marine, #sheet.stowed #export { display: none; }
   @media (min-width: 700px) {
     #sheet { max-height: 40vh; max-width: 460px; right: auto;
       border-radius: 0 16px 0 0; border-right: 1px solid var(--edge); }
@@ -57,11 +72,11 @@
   #toggle { color: var(--dim); }
   #grab { padding: 10px 0 6px; cursor: pointer; flex: none; }
   #grab .pill { width: 38px; height: 4px; border-radius: 2px; background: var(--dim); margin: 0 auto 8px; }
-  #grab .row { display: flex; align-items: baseline; justify-content: space-between; }
+  #grab .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   #grab .row b { font-size: 15px; } #grab .row span { font-size: 12px; color: var(--dim); }
-  #list { overflow-y: auto; -webkit-overflow-scrolling: touch; margin: 0 -14px; padding: 0 14px 4px; }
+  #list { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; margin: 0 -14px; padding: 0 14px 4px; min-height: 0; }
 
-  .mark { display: flex; gap: 12px; align-items: center; padding: 11px 0;
+  .mark { display: flex; gap: 8px; align-items: center; min-height: 58px; padding: 8px 0;
     border-top: 1px solid var(--edge); cursor: pointer; }
   .mark .score { width: 46px; flex: none; text-align: center; font-weight: 700; font-size: 19px;
     font-variant-numeric: tabular-nums; }
@@ -69,8 +84,8 @@
   .mark .co { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
   .mark .sub { font-size: 12px; color: var(--dim); margin-top: 1px; }
   .mark .front { color: #67e8f9; }
-  .mark a.nav { flex: none; font-size: 12px; color: var(--accent); text-decoration: none;
-    border: 1px solid var(--edge); border-radius: 8px; padding: 7px 10px; }
+  .mark a.nav { flex: none; display: grid; place-items: center; min-width: 44px; min-height: 44px;
+    font-size: 12px; color: var(--accent); text-decoration: none; border: 1px solid var(--edge); border-radius: 8px; }
 
   /* Bite window strip: when to go, as opposed to where. */
   #windows { flex: none; padding: 4px 0 10px; border-top: 1px solid var(--edge); }
@@ -100,7 +115,7 @@
   .tag.kahawai { color: #fbbf24; }
 
   .iconbtn { flex: none; background: none; border: 1px solid var(--edge); border-radius: 8px;
-    color: var(--accent); font-size: 11px; padding: 6px 8px; cursor: pointer; }
+    color: var(--accent); font-size: 11px; min-width: 44px; min-height: 44px; padding: 7px 9px; cursor: pointer; }
   .iconbtn.ok { color: #4ade80; }
   #export { font-size: 11px; }
   #cond { font-size: 12px; color: var(--dim); margin-top: 8px; }
@@ -108,7 +123,17 @@
   .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--panel); color: var(--ink);
     border: 1px solid var(--edge); }
   .leaflet-popup-content { margin: 12px 14px; width: 216px !important; font-size: 14px; }
-  .leaflet-control-attribution { font-size: 9px; }
+  .leaflet-control-attribution { font-size: 10px; line-height: 1.3; max-width: min(90vw, 330px);
+    background: rgba(7,13,20,.88) !important; color: #edf7fc !important; border-radius: 6px; padding: 3px 5px !important; }
+  .leaflet-control-attribution a { color: #77d4ff !important; }
+  .leaflet-top .leaflet-control-attribution { margin-top: calc(var(--safe-top) + 146px); margin-right: 12px; }
+  @media (max-width: 390px) { #bar { padding-left: 10px; padding-right: 10px; }
+    #bar h1 { font-size: 14px; } #bar .date { font-size: 10px; }
+    #maptools { left: 10px; right: 10px; } #legend { width: 130px; }
+    #layers button { padding: 0 6px; font-size: 11px; }
+    #marine .grid { gap: 4px; } #marine .cell { padding: 6px 5px; }
+    .mark .co { font-size: 12px; }
+  }
   .pv { display: flex; justify-content: space-between; gap: 10px; }
   .pv + .pv { margin-top: 3px; } .pv span:first-child { color: var(--dim); }
   .big { font-size: 27px; font-weight: 700; line-height: 1; margin-bottom: 9px; }
@@ -128,6 +153,14 @@
 <div id="bar">
   <h1>Tutukaka Hotspots</h1>
   <span class="date" id="stamp"></span>
+</div>
+<div id="prototype">Synthetic data - prototype. Not for navigation.</div>
+<div id="maptools">
+  <div id="legend" aria-label="Hotspot colour scale"><b>Hotspot ranking</b><div class="scale"></div><div class="ends"><span>Lower</span><span>Higher</span></div></div>
+  <div id="layers" role="group" aria-label="Map background">
+    <button id="satellite" type="button" aria-pressed="true">Satellite</button>
+    <button id="street" type="button" aria-pressed="false">Street</button>
+  </div>
 </div>
 
 <div id="sheet">
@@ -180,50 +213,42 @@ const map = L.map("map", {
 const BAR_PX = 62;     // top bar
 const SHEET_PX = 118;  // collapsed bottom sheet
 
-// CARTO's dark basemap is keyless and needs no account, which matters here:
-// the Esri Ocean service it replaced started stamping "API KEY REQUIRED"
-// across the tiles. If CARTO is unreachable we drop to plain OSM rather
-// than leave a skipper staring at an empty grid on a grey void.
-const OSM_FALLBACK = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-
-// Retina phones ask for @2x tiles. CARTO serves them, but if a network or
-// proxy only has the 1x tiles cached the @2x request is the one that fails,
-// so the whole basemap goes missing on exactly the device that matters most.
-// Plain 1x tiles everywhere is the safer trade: slightly softer on a Retina
-// screen, but it renders.
-const CARTO = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png";
-
-const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>';
-let baseFallenBack = false;
+// World Imagery is a key-free prototype basemap; keep imagery source credits
+// visible and offer OSM Standard both by choice and if image tiles fail.
+const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+const OSM = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const ESRI_ATTR = 'Powered by <a href="https://www.esri.com/">Esri</a> | Imagery: Esri, Vantor, Earthstar Geographics, and the GIS User Community';
+const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>';
+const satellite = L.tileLayer(ESRI, { maxZoom: 19, attribution: ESRI_ATTR });
+const street = L.tileLayer(OSM, { maxZoom: 19, attribution: OSM_ATTR });
+let activeBase = satellite;
 let tileErrors = 0;
+let streetErrors = 0;
+satellite.addTo(map);
+map.attributionControl.setPosition("topright");
 
-const base = L.tileLayer(CARTO, {
-  maxZoom: 19,
-  subdomains: "abcd",
-  attribution: `${OSM_ATTR} &copy; CARTO`,
-}).addTo(map);
-
-// One failed tile is normal -- a 404 at the edge of coverage, a dropped
-// request on a patchy connection. Tearing the whole basemap down for that
-// would swap a working map for a worse one. Only a run of failures means
-// the provider is actually unreachable.
-base.on("tileerror", () => {
-  if (baseFallenBack || ++tileErrors < 6) return;
-  baseFallenBack = true;
-  map.removeLayer(base);
-
-  const osm = L.tileLayer(OSM_FALLBACK, { maxZoom: 19, attribution: OSM_ATTR });
-  let osmErrors = 0;
-  // If OSM is unreachable too, say so instead of leaving a blank void: the
-  // grid and the marks still work without a basemap, and a skipper should
-  // know that is what they are looking at.
-  osm.on("tileerror", () => {
-    if (++osmErrors < 6) return;
-    const note = el("nobase");
-    if (note) note.style.display = "block";
-  });
-  osm.addTo(map);
+function switchBase(layer) {
+  if (activeBase !== layer) {
+    map.removeLayer(activeBase);
+    layer.addTo(map);
+    activeBase = layer;
+  }
+  el("satellite").setAttribute("aria-pressed", String(layer === satellite));
+  el("street").setAttribute("aria-pressed", String(layer === street));
+  el("nobase").style.display = "none";
+}
+el("satellite").addEventListener("click", () => switchBase(satellite));
+el("street").addEventListener("click", () => switchBase(street));
+// An isolated failed tile is not an outage; six failed requests trigger a
+// fallback. Users can still switch either way from the map controls.
+satellite.on("tileerror", () => {
+  if (activeBase === satellite && ++tileErrors >= 6) switchBase(street);
 });
+satellite.on("tileload", () => { tileErrors = 0; });
+street.on("tileerror", () => {
+  if (activeBase === street && ++streetErrors >= 6) el("nobase").style.display = "block";
+});
+street.on("tileload", () => { streetErrors = 0; el("nobase").style.display = "none"; });
 
 const RAMP = ["#fde68a","#fcd34d","#fbbf24","#f97316","#ea580c","#dc2626","#9d174d","#581c87"];
 // Percentile is uniform by construction; cubing it keeps ordinary ground
@@ -233,8 +258,8 @@ const colourFor = (p) => RAMP[Math.min(RAMP.length - 1, Math.floor(emph(p) * RAM
 
 const styleFor = (f) => ({
   fillColor: colourFor(f.properties.score_percentile),
-  fillOpacity: 0.14 + 0.70 * emph(f.properties.score_percentile),
-  color: f.properties.is_thermal_front ? "#67e8f9" : "#0b1620",
+  fillOpacity: 0.20 + 0.68 * emph(f.properties.score_percentile),
+  color: f.properties.is_thermal_front ? "#67e8f9" : "#081522",
   weight: f.properties.is_thermal_front ? 0.6 : 0.1,
   opacity: f.properties.is_thermal_front ? 0.8 : 0.3,
 });
@@ -433,6 +458,9 @@ function renderMarine(timing) {
 function markRow(p) {
   const row = document.createElement("div");
   row.className = "mark";
+  row.setAttribute("role", "button");
+  row.setAttribute("tabindex", "0");
+  row.setAttribute("aria-label", `Show mark ${p.rank} on map`);
   row.innerHTML = `
     <div class="score" style="color:${colourFor(p.score_percentile)}">${Math.round(p.hotspot_score)}</div>
     <div class="body">
@@ -455,11 +483,16 @@ function markRow(p) {
     setTimeout(() => { btn.textContent = "Copy"; btn.classList.remove("ok"); }, 1600);
   });
 
-  row.addEventListener("click", (e) => {
-    if (e.target.closest("a") || e.target.closest("button")) return;
+  const selectMark = () => {
     el("sheet").classList.remove("open");
     map.setView([p.lat, p.lon], 13);
     L.popup({ maxWidth: 244 }).setLatLng([p.lat, p.lon]).setContent(popupHtml(p)).openOn(map);
+  };
+  row.addEventListener("click", (e) => {
+    if (!e.target.closest("a,button")) selectMark();
+  });
+  row.addEventListener("keydown", (e) => {
+    if (e.target === row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); selectMark(); }
   });
   return row;
 }
