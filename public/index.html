@@ -135,6 +135,32 @@
     #marine .grid { gap: 4px; } #marine .cell { padding: 6px 5px; }
     .mark .co { font-size: 12px; }
   }
+  /* Future-feature preview: panels never block the map unless opened. */
+  #feature-nav { display: flex; gap: 6px; flex: none; padding: 5px 0 8px; }
+  #feature-nav button { flex: 1; min-width: 0; min-height: 40px; padding: 5px 3px; font-size: 11px; }
+  #feature-panel { position: absolute; z-index: 800; right: 12px; bottom: 12px;
+    width: min(430px, calc(100% - 24px)); max-height: min(74vh, 650px); overflow-y: auto;
+    overscroll-behavior: contain; padding: 16px; border: 1px solid var(--edge);
+    border-radius: 14px; background: #0b1926; box-shadow: 0 12px 40px #000b; }
+  #feature-panel[hidden] { display: none; }
+  #feature-panel h2 { font-size: 17px; margin: 0 40px 6px 0; }
+  #feature-panel .muted { color: var(--dim); font-size: 12px; margin: 5px 0 12px; }
+  #feature-close { position: absolute; right: 12px; top: 12px; }
+  .rule, .catch-entry, .future-item { border-top: 1px solid var(--edge); padding: 10px 0; }
+  .rule b, .future-item b { display: block; }
+  .rule small, .future-item small { display: block; color: var(--dim); margin-top: 3px; }
+  #catch-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  #catch-form label { display: block; color: var(--dim); font-size: 12px; min-width: 0; }
+  #catch-form input, #catch-form select, #catch-form textarea { display: block; width: 100%; min-height: 42px;
+    margin-top: 4px; padding: 8px; border: 1px solid #486475; border-radius: 7px;
+    background: #102536; color: var(--ink); font: inherit; font-size: 14px; color-scheme: dark; }
+  #catch-form .wide { grid-column: 1 / -1; }
+  #catch-form textarea { min-height: 64px; resize: vertical; }
+  #catch-form button { background: #155875; color: white; font-weight: 600; }
+  #catch-feedback { color: #fcd34d; min-height: 18px; }
+  .catch-entry { font-size: 13px; overflow-wrap: anywhere; }
+  .catch-entry small { color: var(--dim); display: block; }
+  @media (max-width: 390px) { #feature-panel { max-height: 76vh; } #feature-nav button { font-size: 10px; } }
   .pv { display: flex; justify-content: space-between; gap: 10px; }
   .pv + .pv { margin-top: 3px; } .pv span:first-child { color: var(--dim); }
   .big { font-size: 27px; font-weight: 700; line-height: 1; margin-bottom: 9px; }
@@ -176,6 +202,11 @@
     </div>
     <div class="row" style="margin-top:2px"><span id="summary">loading…</span><span id="bite">&nbsp;</span></div>
   </div>
+  <div id="feature-nav" aria-label="Prototype features">
+    <button class="iconbtn" type="button" data-feature="rules">MPI rules</button>
+    <button class="iconbtn" type="button" data-feature="log">Catch log</button>
+    <button class="iconbtn" type="button" data-feature="future">Coming soon</button>
+  </div>
   <div id="marine">
     <div class="hd">Sea state <span id="marine-at"></span></div>
     <div class="grid">
@@ -195,6 +226,10 @@
   <div id="list"></div>
 </div>
 
+<section id="feature-panel" role="dialog" aria-modal="false" aria-label="Prototype feature" hidden>
+  <button id="feature-close" class="iconbtn" type="button" aria-label="Close panel">Close</button>
+  <div id="feature-content"></div>
+</section>
 <div id="nobase">Basemap offline &mdash; marks and grid still live</div>
 
 <div id="status">Loading today's grid&hellip;</div>
@@ -389,7 +424,8 @@ function popupHtml(p) {
       <span>${fmt(b.current_contribution, "", 0)} / ${fmt(b.chlorophyll_contribution, "", 0)} pts</span></div>
     ${speciesHtml(p.species)}
     <div style="margin-top:10px"><a href="https://maps.apple.com/?ll=${p.lat},${p.lon}&q=Mark%20${p.rank}"
-      style="color:#38bdf8">Open in Maps</a></div>`;
+      style="color:#38bdf8">Open in Maps</a> &middot;
+      <button class="iconbtn popup-log" type="button" data-rank="${p.rank}">Log catch</button></div>`;
 }
 
 // The bite strip answers "when", the map answers "where". They are scored
@@ -501,6 +537,117 @@ function markRow(p) {
   return row;
 }
 
+
+// Explicit preview content; this is not a live MPI service or legal advice.
+const MPI_URL = "https://www.mpi.govt.nz/fishing-aquaculture/recreational-fishing/fishing-rules/auckland-kermadec-fishing-rules";
+const RULES_HTML = `<h2>MPI regulations <span class="badge mock">prototype</span></h2>
+  <p class="muted">Sample for Northland / Tutukaka, Auckland &amp; Kermadec fishing area.
+  Always check <a href="${MPI_URL}" target="_blank" rel="noopener noreferrer">current MPI rules</a>
+  before fishing. Local closures and restrictions may apply. This is not a compliance check.</p>
+  <div class="rule"><b>Kingfish</b>Minimum length: 75 cm · Daily limit: 3 per fisher.</div>
+  <div class="rule"><b>Hāpuku / bass</b>Minimum length: none listed · Daily limit: 2 per fisher.
+    <small>MPI also lists a possession/accumulation limit of 3 over more than one day in Auckland East and West.</small></div>
+  <div class="rule"><b>Marlin / tuna</b>Size: check MPI · Daily limit: check MPI for the exact species.
+    <small>“Marlin/Tuna” is a group in this prototype, not one legal species. MPI lists southern bluefin tuna separately at 1 per fisher; do not apply that number to other tuna or marlin.</small></div>
+  <p class="muted">MPI lists a combined daily finfish bag limit of 20 per fisher in this area (with exceptions). Source:
+    <a href="${MPI_URL}" target="_blank" rel="noopener noreferrer">MPI Auckland &amp; Kermadec rules</a>.
+    Sample - always check MPI before fishing.</p>`;
+const FUTURE_HTML = `<h2>Coming soon <span class="badge mock">planned</span></h2>
+  <p class="muted">Ideas for a future release, not available in this prototype.</p>
+  <div class="future-item"><b>Live data feeds</b><small>Replace modelled inputs with current ocean and weather feeds.</small></div>
+  <div class="future-item"><b>Multi-day forecast</b><small>Compare marks across upcoming days.</small></div>
+  <div class="future-item"><b>Tide times</b><small>See tide timing beside bite windows.</small></div>
+  <div class="future-item"><b>Offline mode</b><small>Save the map and marks before heading out.</small></div>
+  <div class="future-item"><b>Window alerts</b><small>Know when a promising fishing window opens.</small></div>
+  <div class="future-item"><b>GPX pro export</b><small>Plan and export custom routes and mark sets; basic mark GPX export already works.</small></div>`;
+const CATCH_KEY = "tutukaka-catch-log-v1";
+let selectedMark = null;
+let lastFeatureButton = null;
+const marksByRank = new Map();
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+function localNowInput() {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+function readCatches() {
+  try {
+    const value = JSON.parse(localStorage.getItem(CATCH_KEY) || "[]");
+    return Array.isArray(value) ? value : [];
+  } catch (_) { return []; }
+}
+function renderCatchList() {
+  const list = el("catch-list");
+  if (!list) return;
+  const catches = readCatches();
+  list.innerHTML = catches.length ? catches.slice().reverse().map((c) =>
+    `<div class="catch-entry"><b>${escapeHtml(c.species)}</b> · ${escapeHtml(c.length || "—")} cm / ${escapeHtml(c.weight || "—")} kg
+      <small>${escapeHtml(c.date)} · ${escapeHtml(c.mark || "No mark")}</small>
+      ${c.note ? `<div>${escapeHtml(c.note)}</div>` : ""}</div>`).join("") :
+    '<p class="muted">No catches logged yet.</p>';
+}
+function showFeature(name, mark = null) {
+  selectedMark = mark;
+  const panel = el("feature-panel");
+  const content = el("feature-content");
+  if (name === "rules") content.innerHTML = RULES_HTML;
+  if (name === "future") content.innerHTML = FUTURE_HTML;
+  if (name === "log") {
+    content.innerHTML = `<h2>Catch log <span class="badge mock">prototype</span></h2>
+      <p class="muted">Stored on this device only - prototype. Clearing browser data removes catches. Not backed up or synced.</p>
+      <form id="catch-form">
+        <label>Species<select name="species" required>
+          <option>Kingfish</option><option>Hapuku</option><option>Marlin/Tuna</option>
+          <option>Snapper</option><option>Kahawai</option><option>Other</option></select></label>
+        <label>Mark<input name="mark" placeholder="Optional mark / location" maxlength="120"></label>
+        <label>Length (cm)<input name="length" type="number" min="0" step="0.1" placeholder="Optional"></label>
+        <label>Weight (kg)<input name="weight" type="number" min="0" step="0.01" placeholder="Optional"></label>
+        <label class="wide">Date and time<input name="date" type="datetime-local" required></label>
+        <label class="wide">Note (optional)<textarea name="note" maxlength="500" placeholder="Conditions, gear, etc."></textarea></label>
+        <button class="iconbtn wide" type="submit">Save catch on this device</button>
+      </form><div id="catch-feedback" role="status"></div><h3>Recent catches</h3><div id="catch-list"></div>`;
+    const form = el("catch-form");
+    form.elements.date.value = localNowInput();
+    if (mark) {
+      form.elements.mark.value = `Mark ${mark.rank} (${dd(mark.lat, mark.lon)})`;
+      const species = (mark.species || []).find((t) => Array.from(form.elements.species.options).some((o) => o.value === t));
+      if (species) form.elements.species.value = species;
+    }
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const data = new FormData(form);
+      const entry = Object.fromEntries(["species", "mark", "length", "weight", "date", "note"].map((key) => [key, String(data.get(key) || "").trim()]));
+      if (!entry.length && !entry.weight) { el("catch-feedback").textContent = "Enter a length or weight."; return; }
+      try {
+        const catches = readCatches();
+        catches.push(entry);
+        localStorage.setItem(CATCH_KEY, JSON.stringify(catches));
+        el("catch-feedback").textContent = "Catch saved on this device.";
+        form.reset();
+        form.elements.date.value = localNowInput();
+        if (selectedMark) form.elements.mark.value = `Mark ${selectedMark.rank} (${dd(selectedMark.lat, selectedMark.lon)})`;
+        renderCatchList();
+      } catch (_) { el("catch-feedback").textContent = "Could not save. Check browser storage settings."; }
+    });
+    renderCatchList();
+  }
+  panel.hidden = false;
+  panel.scrollTop = 0;
+  el("feature-close").focus();
+}
+document.querySelectorAll("#feature-nav button").forEach((button) => button.addEventListener("click", (e) => {
+  e.stopPropagation(); lastFeatureButton = button; showFeature(button.dataset.feature);
+}));
+el("feature-close").addEventListener("click", () => {
+  el("feature-panel").hidden = true;
+  if (lastFeatureButton) lastFeatureButton.focus();
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") el("feature-panel").hidden = true; });
+document.addEventListener("click", (e) => {
+  const button = e.target.closest(".popup-log");
+  if (button) showFeature("log", marksByRank.get(Number(button.dataset.rank)));
+});
+
 el("grab").addEventListener("click", (e) => {
   if (e.target.closest("button")) return;
   const sheet = el("sheet");
@@ -558,7 +705,8 @@ el("toggle").addEventListener("click", (e) => {
 
     const top = data.features.slice(0, 25).map((f) => f.properties);
     const list = el("list");
-    top.forEach((p) => list.appendChild(markRow(p)));
+    top.forEach((p) => { marksByRank.set(p.rank, p); list.appendChild(markRow(p)); });
+    data.features.forEach((f) => marksByRank.set(f.properties.rank, f.properties));
 
     el("export").addEventListener("click", (e) => {
       e.stopPropagation();
