@@ -150,7 +150,7 @@
   }
   /* Feature panels never block the map unless opened. */
   #species-filter {flex:none;display:flex;align-items:center;gap:8px;padding:4px 0 8px;font-size:12px;color:var(--dim);}
-  #species-filter select {flex:1;min-width:0;background:#102536;color:var(--ink);border:1px solid var(--edge);border-radius:7px;padding:7px;font:inherit;font-size:12px;}
+  #species-filter select {flex:1;min-width:0;color-scheme:dark;background:#102536;color:var(--ink);border:1px solid var(--edge);border-radius:7px;padding:7px;font:inherit;font-size:12px;}
   #bars div {cursor:pointer;} #bars div.selected {outline:2px solid white;outline-offset:2px;}
   #feature-nav { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; flex: none; padding: 5px 0 8px; }
   #feature-nav button { min-width: 0; min-height: 38px; padding: 5px 2px; font-size: 10px; }
@@ -530,8 +530,10 @@ function popupHtml(p) {
     <div class="pv"><span>Chlorophyll</span><span>${fmt(p.chlorophyll_mg_m3, " mg/m&sup3;", 2)}</span></div>
     <div class="pv" style="margin-top:8px"><span>Front / slope</span>
       <span>${fmt(b.temp_contribution, "", 0)} / ${fmt(b.slope_contribution, "", 0)} pts</span></div>
+    <div class="pv"><span>Structure</span><b>${p.depth_m > 150 ? "Outer shelf break" : p.depth_m > 70 ? "Ledge edge" : "Shallow reef"}</b></div>
     <div class="pv"><span>Current / food</span>
       <span>${fmt(b.current_contribution, "", 0)} / ${fmt(b.chlorophyll_contribution, "", 0)} pts</span></div>
+    <p style="margin:8px 0 2px;font-size:12px"><b>Why this spot:</b> ${p.is_thermal_front ? "A temperature front, " : "Water temperature, "}${Number(p.slope_deg).toFixed(1)}° slope and ${Number(p.current_speed_ms).toFixed(2)} m/s current feed its ranking.</p>
     ${speciesHtml(p.species)}
     <div style="margin-top:10px"><a href="https://maps.apple.com/?ll=${p.lat},${p.lon}&q=Mark%20${p.rank}"
       style="color:#38bdf8">Open in Maps</a> &middot;
@@ -778,7 +780,7 @@ function renderExplore(section) {
       rows.map(r=>`<div class="feature-row"><span>${r[0]}<small>${r[2]}</small></span><b>${r[1]}</b></div>`).join("")+
       `<button class="iconbtn" data-open-forecast type="button">View tides &amp; outlook</button>`;
   } else if (section === "layers") {
-    view.innerHTML = `<h3>Map overlays</h3><p class="muted">Colour the map by hotspot score, depth or water colour.</p>`+
+    view.innerHTML = `<h3>Bottom structure</h3><p class="muted">Colour by hotspot score, depth bands or water colour. Tap a map cell to see its depth, slope and why it ranked.</p>`+
       [["hotspots","Hotspots"],["depth","Depth"],["colour","Water colour"]].map(([k,v])=>`<button class="iconbtn layer-choice" type="button" data-overlay="${k}" aria-pressed="${activeOverlay===k}">${v}</button>`).join("")+
       `<div class="feature-row">Current layer <b>${activeOverlay === "colour" ? "Water colour" : activeOverlay === "depth" ? "Depth" : "Hotspots"}</b></div>`;
   } else if (section === "species") {
@@ -787,8 +789,12 @@ function renderExplore(section) {
       patterns.map(r=>`<div class="feature-row"><span>${r[0]}<small>${r[2]}</small></span><b>${r[1]}</b></div>`).join("");
   } else if (section === "route") {
     view.innerHTML = `<h3>Plan a route</h3><p class="muted">Choose up to five marks in order and export GPX waypoints. This is a list of waypoints, not a navigable route.</p>`+
-      demoTopMarks.slice(0,8).map(p=>`<label class="route-choice"><input type="checkbox" data-route="${p.rank}" ${demoRoute.includes(p.rank)?"checked":""}> Mark ${p.rank} · ${dd(p.lat,p.lon)} · ${Math.round(demoScore(p))}/100</label>`).join("")+
-      `<div class="feature-row">Selected <b id="route-count">${demoRoute.length} / 5</b></div><button id="route-export" class="iconbtn" type="button">Export selected GPX</button><p id="route-feedback" class="muted" role="status"></p>`;
+      demoTopMarks.slice(0,8).map(p=>`<label class="route-choice"><input type="checkbox" data-route="${p.rank}" ${demoRoute.includes(p.rank)?"checked":""}> ${escapeHtml(spotName(p))} · ${dd(p.lat,p.lon)} · ${Math.round(demoScore(p))}/100</label>`).join("") +
+      `<div class="feature-row">Selected <b id="route-count">${demoRoute.length} / 5</b></div><button id="route-export" class="iconbtn" type="button">Export selected GPX</button><p id="route-feedback" class="muted" role="status"></p>
+      <details><summary>Send waypoints to a boat unit</summary><p class="muted">Export the GPX file, then follow the chartplotter manufacturer's import instructions for your exact model. Verify every waypoint and use certified charts to plan safe passage. Device formats vary.</p>
+      <a href="https://support.garmin.com/en-US/?faq=LAlge3IZpe2KzBSSsZ9tp8" target="_blank" rel="noopener noreferrer">Garmin transfer help</a> ·
+      <a href="https://www.lowrance.com/help-and-support/lowrance-app-faqs/" target="_blank" rel="noopener noreferrer">Lowrance app help</a> ·
+      <a href="https://www.simrad-yachting.com/help--support/simrad-app-faqs/" target="_blank" rel="noopener noreferrer">Simrad app help</a></details>`;
   } else if (section === "alerts") {
     const config = readDemo(ALERT_KEY,{threshold:80,species:"Any"});
     view.innerHTML = `<h3>Fishing window alerts</h3><p class="muted">Set an alert and check a matching window below. Settings stay on this device; no push notifications or background monitoring.</p>
@@ -835,6 +841,7 @@ function renderCatchList() {
     `<div class="catch-entry"><b>${escapeHtml(c.species)}</b> · ${escapeHtml(c.length || "—")} cm / ${escapeHtml(c.weight || "—")} kg
       <small>${escapeHtml(c.date)} · ${escapeHtml(c.mark || "No mark")}</small>
       ${c.note ? `<div>${escapeHtml(c.note)}</div>` : ""}
+      ${c.photo && c.photo.startsWith("data:image/jpeg;base64,") ? `<img src="${c.photo}" alt="Saved catch or structure photo" style="display:block;max-width:100%;max-height:160px;border-radius:8px;margin:6px 0">` : ""}
       <button class="iconbtn remove-catch" type="button" data-index="${catches.length - 1 - reverseIndex}" aria-label="Delete logged catch">Delete</button></div>`).join("") :
     '<p class="muted">No catches logged yet.</p>';
 }
@@ -861,21 +868,33 @@ function showFeature(name, mark = null) {
         <label>Length (cm)<input name="length" type="number" min="0" step="0.1" placeholder="Optional"></label>
         <label>Weight (kg)<input name="weight" type="number" min="0" step="0.01" placeholder="Optional"></label>
         <label class="wide">Date and time<input name="date" type="datetime-local" required></label>
-        <label class="wide">Note (optional)<textarea name="note" maxlength="500" placeholder="Conditions, gear, etc."></textarea></label>
+        <label class="wide">Structure / sonar note<textarea name="note" maxlength="500" placeholder="Bottom structure, conditions, gear, sonar observation"></textarea></label>
+        <label class="wide">Photo (optional, saved on this device)<input name="photo" type="file" accept="image/*"></label>
         <button class="iconbtn wide" type="submit">Save catch on this device</button>
       </form><div id="catch-feedback" role="status"></div><h3>Recent catches</h3><div id="catch-list"></div>`;
     const form = el("catch-form");
     form.elements.date.value = localNowInput();
     if (mark) {
-      form.elements.mark.value = `Mark ${mark.rank} (${dd(mark.lat, mark.lon)})`;
+      form.elements.mark.value = `${spotName(mark)} (${dd(mark.lat, mark.lon)})`;
       const species = (mark.species || []).find((t) => Array.from(form.elements.species.options).some((o) => o.value === t));
       if (species) form.elements.species.value = species;
     }
-    form.addEventListener("submit", (e) => {
+    form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const data = new FormData(form);
       const entry = Object.fromEntries(["species", "mark", "length", "weight", "date", "note"].map((key) => [key, String(data.get(key) || "").trim()]));
-      if (!entry.length && !entry.weight) { el("catch-feedback").textContent = "Enter a length or weight."; return; }
+      const photo = form.elements.photo.files[0];
+      if (!entry.length && !entry.weight && !entry.note && !photo) { el("catch-feedback").textContent = "Add a catch measurement, structure note or photo."; return; }
+      if (photo) {
+        if (!photo.type.startsWith("image/")) {el("catch-feedback").textContent="Choose an image file.";return;}
+        try {
+          const bitmap = await createImageBitmap(photo);
+          const ratio = Math.min(1,700/Math.max(bitmap.width,bitmap.height));
+          const canvas=document.createElement("canvas");canvas.width=Math.round(bitmap.width*ratio);canvas.height=Math.round(bitmap.height*ratio);
+          canvas.getContext("2d").drawImage(bitmap,0,0,canvas.width,canvas.height);
+          entry.photo=canvas.toDataURL("image/jpeg",.65);bitmap.close();
+        } catch (_) {el("catch-feedback").textContent="Could not read that photo.";return;}
+      }
       try {
         const catches = readCatches();
         catches.push(entry);
@@ -883,7 +902,7 @@ function showFeature(name, mark = null) {
         el("catch-feedback").textContent = "Catch saved on this device.";
         form.reset();
         form.elements.date.value = localNowInput();
-        if (selectedMark) form.elements.mark.value = `Mark ${selectedMark.rank} (${dd(selectedMark.lat, selectedMark.lon)})`;
+        if (selectedMark) form.elements.mark.value = `${spotName(selectedMark)} (${dd(selectedMark.lat, selectedMark.lon)})`;
         renderCatchList();
       } catch (_) { el("catch-feedback").textContent = "Could not save. Check browser storage settings."; }
     });
