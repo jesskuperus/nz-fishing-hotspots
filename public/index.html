@@ -34,6 +34,9 @@
   html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink);
     font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
   #map { position: absolute; inset: 0; background: var(--bg); }
+  /* Cosmetic softening only: the 500 m cell geometry and hit targets stay intact. */
+  .leaflet-overlay-pane canvas { filter: blur(3px); }
+
 
   /* Top bar: just the headline number, so it reads at a glance on deck. */
   #bar {
@@ -56,6 +59,8 @@
   #legend .scale { height: 7px; border-radius: 99px; background: linear-gradient(90deg,#fde68a,#f97316,#dc2626,#9d174d,#581c87); }
   #legend .ends { display: flex; justify-content: space-between; margin-top: 3px; color: #d2e5ef; }
   #layers { display: flex; padding: 3px; }
+  #front-toggle { margin-left: 4px; border: 1px solid rgba(220,235,245,.45) !important; background: rgba(7,13,20,.9) !important; }
+  #front-toggle[aria-pressed="true"] { color: #b9ebf4 !important; box-shadow: inset 0 -2px #67e8f9; }
   #layers button { border: 0; border-radius: 7px; background: transparent; color: #d2e5ef;
     min-height: 44px; padding: 0 9px; font: inherit; font-size: 12px; cursor: pointer; }
   #layers button[aria-pressed="true"] { background: #155875; color: white; }
@@ -76,7 +81,7 @@
   /* Fully stowed: just the handle bar, so the map is never obscured. */
   #sheet.stowed { transform: translateY(calc(100% - 76px)); }
   #sheet.stowed #grab .row + .row, #sheet.stowed #windows,
-  #sheet.stowed #list, #sheet.stowed #marine, #sheet.stowed #export, #sheet.stowed #species-filter { display: none; }
+  #sheet.stowed #list, #sheet.stowed #marine, #sheet.stowed #export, #sheet.stowed #species-filter, #sheet.stowed #feature-nav { display: none; }
   @media (min-width: 700px) {
     #sheet { max-height: 40vh; max-width: 460px; right: auto;
       border-radius: 0 16px 0 0; border-right: 1px solid var(--edge); }
@@ -252,6 +257,7 @@
     <button id="satellite" type="button" aria-pressed="true">Satellite</button>
     <button id="street" type="button" aria-pressed="false">Street</button>
     <button id="labels" type="button" aria-pressed="true">Labels</button>
+    <button id="front-toggle" type="button" aria-pressed="true" title="Show or hide modelled temperature fronts">Fronts</button>
   </div>
 </div>
 
@@ -357,6 +363,7 @@ map.getPane("labelsPane").style.zIndex = 450;
 map.getPane("labelsPane").style.pointerEvents = "none";
 const labels = L.tileLayer(ESRI_REF, { maxZoom: 19, attribution: REF_ATTR, pane: "labelsPane" });
 let labelsOn = true;
+let frontsOn = true;
 let activeBase = satellite;
 let tileErrors = 0;
 let streetErrors = 0;
@@ -417,9 +424,9 @@ const colourFor = (p) => RAMP[Math.min(RAMP.length - 1, Math.floor(emph(p) * RAM
 const styleFor = (f) => ({
   fillColor: colourFor(f.properties.score_percentile),
   fillOpacity: 0.20 + 0.68 * emph(f.properties.score_percentile),
-  color: f.properties.is_thermal_front ? "#67e8f9" : "#081522",
-  weight: f.properties.is_thermal_front ? 0.6 : 0.1,
-  opacity: f.properties.is_thermal_front ? 0.8 : 0.3,
+  color: f.properties.is_thermal_front && frontsOn ? "#67e8f9" : "#081522",
+  weight: f.properties.is_thermal_front && frontsOn ? 0.35 : 0.1,
+  opacity: f.properties.is_thermal_front && frontsOn ? 0.4 : 0.3,
 });
 
 // Chartplotters and the people reading them out over a radio want different
@@ -473,7 +480,7 @@ function buildGpx(marks, date) {
   const pts = marks.map((p) => {
     const tags = (p.species || []).join(", ");
     const desc = [
-      `Score ${Math.round(p.hotspot_score)}/100`,
+      `Score ${Math.round(demoScore(p))}/100`,
       `${Math.round(p.depth_m)} m`,
       `${p.sst_c.toFixed(1)} C`,
       p.is_thermal_front ? "thermal front" : null,
@@ -528,7 +535,7 @@ const fmt = (v, u = "", dp = 1) =>
 function popupHtml(p) {
   const b = p.score_breakdown || {};
   return `
-    <div class="big">${fmt(p.hotspot_score, "", 1)}<small> / 100 &middot; rank #${p.rank}</small></div>
+    <div class="big">${fmt(demoScore(p), "", 1)}<small> / 100 &middot; ${activeDay === 0 ? `rank #${p.rank}` : `demo day +${activeDay}`}</small></div>
     <div class="pv"><span>Spot</span><b>${escapeHtml(spotName(p))}</b></div>
     <div class="pv"><span>Position</span><span class="co">${dd(p.lat, p.lon)}</span></div>
     <div class="pv"><span></span><span class="co" style="font-size:11px">${dmsPair(p.lat, p.lon)}</span></div>
@@ -631,7 +638,7 @@ function markRow(p) {
   row.setAttribute("tabindex", "0");
   row.setAttribute("aria-label", `Show ${spotName(p)} on map`);
   row.innerHTML = `
-    <div class="score" style="color:${colourFor(p.score_percentile)}">${Math.round(p.hotspot_score)}</div>
+    <div class="score" style="color:${colourFor(Math.max(0, Math.min(100, Number(p.score_percentile)+demoShift(p,activeDay))))}">${Math.round(demoScore(p))}</div>
     <div class="body">
       <div class="co" style="color:var(--ink)">${escapeHtml(spotName(p))}</div>
       <div class="sub">${dd(p.lat,p.lon)}</div>
@@ -716,12 +723,23 @@ const FORECAST_HTML = `<h2>Multi-day outlook</h2>
   </div><div id="day-preview"></div>`;
 let activeDay = 0;
 let demoGrid = null;
+el("front-toggle").addEventListener("click", () => {
+  frontsOn = !frontsOn;
+  el("front-toggle").setAttribute("aria-pressed", String(frontsOn));
+  if (demoGrid) applyScenario();
+});
 let demoDate = "";
 let demoTiming = null;
 let activeOverlay = "hotspots";
 let selectedSpotPin = null;
 const demoShift = (p, day) => day === 0 ? 0 : Math.round((Math.sin(p.rank * 1.71 + day * 2.31) * 7) + (day === 1 ? -3 : 2));
 const demoScore = (p) => Math.max(0, Math.min(100, Number(p.hotspot_score) + demoShift(p, activeDay)));
+function updateLegend() {
+  const legend = el("legend");
+  legend.querySelector("b").textContent = activeOverlay === "depth" ? "Depth bands" : activeOverlay === "colour" ? "Water colour" : "Hotspot ranking";
+  legend.querySelector(".scale").style.background = activeOverlay === "depth" ? "linear-gradient(90deg,#67e8f9,#2563eb,#172554)" : activeOverlay === "colour" ? "linear-gradient(90deg,#2563eb,#eab308,#4ade80)" : "";
+  legend.querySelector(".ends").innerHTML = activeOverlay === "depth" ? "<span>Shallow</span><span>Deep</span>" : activeOverlay === "colour" ? "<span>Low</span><span>High</span>" : "<span>Lower</span><span>Higher</span>";
+}
 function dayLabel(day) {
   const date = new Date(`${demoDate}T12:00:00+12:00`);
   if (isNaN(date.getTime())) return day === 0 ? "Today" : `Day +${day}`;
@@ -738,6 +756,7 @@ function tideTimes(day) {
 }
 function applyScenario() {
   if (!demoGrid) return;
+  updateLegend();
   demoGrid.setStyle((f) => {
     const p = f.properties;
     if (activeOverlay === "depth") return {fillColor: p.depth_m < 50 ? "#67e8f9" : p.depth_m < 120 ? "#2563eb" : "#172554", fillOpacity:.52, color:"#071423",weight:.12};
@@ -793,9 +812,9 @@ function renderExplore(section) {
   document.querySelectorAll("[data-explore]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.explore===section)));
   if (section === "feeds") {
     const rows = [["Sea surface temp", "18.7 °C", "Grid"],["Chlorophyll / water colour", "0.56 mg/m³", "Grid"],
-      ["Currents", "0.4 m/s", "Grid"],["Wind & swell", "14 kt / 1.2 m", "Outlook"],
+      ["Currents", "0.4 m/s", "Grid"],["Wind & swell", `${el("m-wind").textContent} / ${el("m-swell").textContent}`, "Outlook"],
       ["Tides & moon", "4 events", "Daily rhythm"],["Depth & slope", "8–220 m", "Terrain"]];
-    view.innerHTML = `<h3>Conditions at a glance</h3><p class="muted">What is shaping today’s marks.</p>`+
+    view.innerHTML = `<h3>Conditions at a glance</h3><p class="muted">What is shaping ${dayLabel(activeDay)} marks.</p>`+
       rows.map(r=>`<div class="feature-row"><span>${r[0]}<small>${r[2]}</small></span><b>${r[1]}</b></div>`).join("")+
       `<button class="iconbtn" data-open-forecast type="button">View tides &amp; outlook</button>`;
   } else if (section === "layers") {
@@ -874,6 +893,7 @@ function showFeature(name, mark = null) {
     content.innerHTML = FORECAST_HTML;
     content.querySelectorAll("#day-picker button").forEach((b) => b.addEventListener("click", () => { activeDay=Number(b.dataset.day); applyScenario(); }));
     renderDayPreview();
+    content.querySelectorAll("#day-picker button").forEach(b=>b.setAttribute("aria-pressed",String(Number(b.dataset.day)===activeDay)));
   }
   if (name === "explore") { content.innerHTML = EXPLORE_HTML; renderExplore("feeds"); }
   if (name === "log") {
@@ -948,14 +968,14 @@ el("feature-content").addEventListener("click", (e) => {
   if (action.id === "route-export") {
     const marks=demoRoute.map(rank=>demoTopMarks.find(p=>p.rank===rank)).filter(Boolean);
     if (!marks.length) {el("route-feedback").textContent="Choose at least one mark.";return;}
-    downloadGpx(marks,`${demoDate}-demo-route`); el("route-feedback").textContent="GPX waypoints downloaded. Not a navigable route.";return;
+    downloadGpx(marks,`${demoDate}-demo-route-day-${activeDay}`); el("route-feedback").textContent="GPX waypoints downloaded. Not a navigable route.";return;
   }
   if (action.id === "alert-save") {
     try {localStorage.setItem(ALERT_KEY,JSON.stringify({threshold:Number(el("alert-threshold").value),species:el("alert-species").value}));renderAlertResult();}
     catch(_) {el("alert-result").textContent="Could not save settings on this device.";} return;
   }
   if (action.id === "pack-save") {
-    try {localStorage.setItem(PACK_KEY,JSON.stringify({date:demoDate,marks:demoTopMarks.slice(0,25).map(p=>({rank:p.rank,lat:p.lat,lon:p.lon,score:p.hotspot_score})),tides:tideTimes(activeDay)}));renderExplore("offline");}
+    try {localStorage.setItem(PACK_KEY,JSON.stringify({date:demoDate,marks:demoTopMarks.slice(0,25).map(p=>({rank:p.rank,lat:p.lat,lon:p.lon,score:demoScore(p)})),tides:tideTimes(activeDay)}));renderExplore("offline");}
     catch(_) {el("pack-view").textContent="Could not save the demo pack.";} return;
   }
   if (action.id === "pack-open") {
@@ -1059,7 +1079,7 @@ el("toggle").addEventListener("click", (e) => {
 
     el("export").addEventListener("click", (e) => {
       e.stopPropagation();
-      downloadGpx(top, meta.date);
+      downloadGpx(demoTopMarks.filter(p => targetSpecies === "Any" || (p.species||[]).includes(targetSpecies)).sort((a,b)=>demoScore(b)-demoScore(a)), `${meta.date}-day-${activeDay}`);
     });
     el("status").classList.add("done");
   } catch (err) {
