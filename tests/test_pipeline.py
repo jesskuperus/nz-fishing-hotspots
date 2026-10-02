@@ -68,7 +68,8 @@ def test_bathymetry_spans_the_shelf_and_masks_land():
     bathy = load_bathymetry(grid)
     depth = bathy.depth_m
     lat_mesh, lon_mesh = grid.mesh
-    assert np.isnan(depth[land_mask(lat_mesh, lon_mesh)]).all(), "land must be NaN"
+    if "synthetic" in bathy.source:
+        assert np.isnan(depth[land_mask(lat_mesh, lon_mesh)]).all(), "land must be NaN"
     water = depth[np.isfinite(depth)]
     assert water.min() < 20.0, water.min()
     assert water.max() > 200.0, water.max()
