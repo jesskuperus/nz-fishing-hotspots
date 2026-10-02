@@ -87,3 +87,75 @@ def fetch_tide(date: dt.date, lat: float, lon: float) -> dict:
         "movement": movement,
         "range_m": round(max(heights) - min(heights), 2),
     }
+
+
+def fetch_tide_extremes(date: dt.date, lat: float, lon: float, days: int = 3) -> dict:
+    """High and low water times (NZ local) for ``days`` days from ``date``.
+
+    Built from the same Open-Meteo modelled sea level as the hourly series,
+    requested in NZ time. Heights are metres relative to mean sea level, from
+    a coarse global model, so this is a guide and not a tide table.
+    Returns {"source", "days": [[{type,time,height_m}, ...], ...]} and an
+    empty ``days`` list if the live request fails (nothing is invented).
+    """
+    out = {"source": "open-meteo-marine", "days": []}
+    if not config.USE_LIVE_OCEAN_DATA:
+        return {"source": "unavailable", "days": []}
+    try:
+        import httpx
+
+        end = date + dt.timedelta(days=days)  # one extra day so day-end peaks resolve
+        with httpx.Client(timeout=config.OCEAN_FETCH_TIMEOUT_S) as client:
+            resp = client.get(
+                config.OPEN_METEO_MARINE_URL,
+                params={
+                    "latitude": lat,
+                    "longitude": lon,
+                    "hourly": "sea_level_height_msl",
+                    "start_date": date.isoformat(),
+                    "end_date": end.isoformat(),
+                    "timezone": "Pacific/Auckland",
+                },
+            )
+        if resp.status_code != 200:
+            log.info("Tide extremes fetch returned %s", resp.status_code)
+            return {"source": "unavailable", "days": []}
+        hourly = resp.json().get("hourly", {})
+        times = hourly.get("time") or []
+        vals = hourly.get("sea_level_height_msl") or []
+        series = [
+            (dt.datetime.fromisoformat(t), float(v))
+            for t, v in zip(times, vals)
+            if v is not None
+        ]
+    except Exception as exc:
+        log.warning("Tide extremes fetch failed (%s)", exc)
+        return {"source": "unavailable", "days": []}
+
+    per_day: dict[dt.date, list[dict]] = {date + dt.timedelta(days=i): [] for i in range(days)}
+    for i in range(1, len(series) - 1):
+        t, h = series[i]
+        prev_h, next_h = series[i - 1][1], series[i + 1][1]
+        kind = None
+        if h > prev_h and h >= next_h:
+            kind = "High"
+        elif h < prev_h and h <= next_h:
+            kind = "Low"
+        if kind is None:
+            continue
+        # Parabolic refinement of the peak time and height.
+        denom = prev_h - 2 * h + next_h
+        shift = 0.0 if abs(denom) < 1e-9 else 0.5 * (prev_h - next_h) / denom
+        shift = max(-0.5, min(0.5, shift))
+        peak_t = t + dt.timedelta(hours=shift)
+        peak_h = h - 0.25 * (prev_h - next_h) * shift
+        if peak_t.date() in per_day:
+            per_day[peak_t.date()].append(
+                {
+                    "type": kind,
+                    "time": peak_t.strftime("%H:%M"),
+                    "height_m": round(peak_h, 2),
+                }
+            )
+    out["days"] = [per_day[d] for d in sorted(per_day)]
+    return out
