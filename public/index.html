@@ -1233,7 +1233,9 @@ el("toggle").addEventListener("click", (e) => {
       const real = (v) => v && !String(v).includes("synthetic");
       const live = [];
       if (real(src.bathymetry)) live.push("seabed depth (GEBCO)");
-      if (real(src.ocean)) live.push("sea temp &amp; currents (Open-Meteo, coarse)");
+      if (String(src.ocean || "").includes("copernicus")) live.push("sea temp (Copernicus satellite, ~5 km) &amp; currents (Open-Meteo, coarse)");
+      else if (real(src.ocean)) live.push("sea temp &amp; currents (Open-Meteo, coarse)");
+      if (String(src.chlorophyll || "").includes("copernicus")) live.push("chlorophyll (Copernicus, ~4 km)");
       const marineReal = meta.timing && meta.timing.conditions_source && !String(meta.timing.conditions_source).includes("synthetic");
       if (marineReal) live.push("wind &amp; swell");
       const tx = meta.timing && meta.timing.tide_extremes;
