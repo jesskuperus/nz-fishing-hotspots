@@ -42,8 +42,43 @@ def _find_local_raster() -> Path | None:
     return None
 
 
+def _sample_ascii_grid(path: Path, grid: Grid) -> np.ndarray | None:
+    """Read an ESRI ASCII grid (lat/lon degrees) with numpy only.
+
+    Lets the daily job use the committed GEBCO subset without rasterio.
+    """
+    from scipy.interpolate import RegularGridInterpolator
+
+    try:
+        header = {}
+        with open(path) as fh:
+            for _ in range(6):
+                k, v = fh.readline().split()
+                header[k.lower()] = float(v)
+            data = np.loadtxt(fh, dtype="float64")
+        n_rows, n_cols = int(header["nrows"]), int(header["ncols"])
+        data = data.reshape(n_rows, n_cols)
+        data[data == header.get("nodata_value", -9999)] = np.nan
+        cs = header["cellsize"]
+        lons = header["xllcenter"] + cs * np.arange(n_cols)
+        lats = header["yllcenter"] + cs * np.arange(n_rows)
+        data = data[::-1]  # file is north-first; interpolator needs ascending
+        interp = RegularGridInterpolator(
+            (lats, lons), data, method="linear", bounds_error=False, fill_value=np.nan
+        )
+        lat_mesh, lon_mesh = grid.mesh
+        pts = np.stack([lat_mesh.ravel(), lon_mesh.ravel()], axis=-1)
+        samples = interp(pts).reshape(grid.shape)
+    except Exception as exc:
+        log.warning("Failed to read ASCII grid %s (%s)", path, exc)
+        return None
+    return _finish_samples(samples, path)
+
+
 def _sample_raster(path: Path, grid: Grid) -> np.ndarray | None:
     """Sample a depth raster at every cell centre. None if unreadable."""
+    if path.suffix.lower() == ".asc":
+        return _sample_ascii_grid(path, grid)
     try:
         import rasterio
         from rasterio.warp import transform as warp_transform
@@ -66,6 +101,10 @@ def _sample_raster(path: Path, grid: Grid) -> np.ndarray | None:
         log.warning("Failed to read bathymetry raster %s (%s)", path, exc)
         return None
 
+    return _finish_samples(samples, path)
+
+
+def _finish_samples(samples: np.ndarray, path: Path) -> np.ndarray | None:
     # LINZ and GEBCO publish elevation (negative below sea level); flip to
     # positive depth when that is clearly the convention in use.
     finite = samples[np.isfinite(samples)]
