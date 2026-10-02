@@ -1228,6 +1228,20 @@ el("toggle").addEventListener("click", (e) => {
 
     renderMarine(meta.timing);
 
+    // Say only what is real in today's file. Falls back to the demo wording.
+    {
+      const src = meta.sources || {};
+      const real = (v) => v && !String(v).includes("synthetic");
+      const live = [];
+      if (real(src.bathymetry)) live.push("seabed depth (GEBCO)");
+      if (real(src.ocean)) live.push("sea temp &amp; currents (Open-Meteo, coarse)");
+      const marineReal = meta.timing && meta.timing.conditions_source && !String(meta.timing.conditions_source).includes("synthetic");
+      if (marineReal) live.push("wind &amp; swell");
+      if (live.length) {
+        el("prototype").innerHTML = `Real: ${live.join(", ")}. Still demo: ${real(src.chlorophyll) ? "" : "chlorophyll, "}fronts, tide times, species, spot names &middot; Not for navigation`;
+      }
+    }
+
     const top = data.features.slice(0, 25).map((f) => f.properties);
     demoTopMarks = top; demoMarine = meta.timing && meta.timing.marine_now; demoDate=meta.date; demoTiming=meta.timing;
     const list = el("list");
