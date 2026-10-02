@@ -3,7 +3,8 @@
 Order of preference:
 1. Open-Meteo Marine API (no key required) sampled on a coarse grid and
    interpolated onto the 500 m grid.
-2. Copernicus Marine (stubbed — needs credentials; see TODO_USER_SETUP.md).
+2. Copernicus Marine satellite SST replaces the temperature field when
+   credentials are set (see copernicus.py).
 3. ``mock_ocean_fetcher``, which always succeeds.
 
 Nothing here raises on a network or credential failure: a failed fetch is
@@ -137,22 +138,17 @@ def _fetch_open_meteo(grid: Grid, date: dt.date) -> OceanField | None:
     )
 
 
-def _fetch_copernicus(grid: Grid, date: dt.date) -> OceanField | None:
-    """Copernicus Marine stub. Returns None until credentials are configured."""
-    if not (config.COPERNICUS_USERNAME and config.COPERNICUS_PASSWORD):
+def _fetch_copernicus_sst(grid: Grid, date: dt.date):
+    """Satellite SST (OSTIA, ~5 km) from Copernicus Marine, or None."""
+    from backend.data_ingestion import copernicus
+
+    got = copernicus.fetch_on_grid(
+        copernicus.SST_DATASET_ID, copernicus.SST_VARIABLE, grid, date
+    )
+    if got is None:
         return None
-    try:
-        import copernicusmarine  # type: ignore  # noqa: F401
-    except ImportError:
-        log.warning(
-            "Copernicus credentials set but the copernicusmarine package is "
-            "not installed; see TODO_USER_SETUP.md"
-        )
-        return None
-    # Intentionally not implemented in the MVP: wiring the real subset call
-    # needs a dataset ID and an authenticated session. See TODO_USER_SETUP.md.
-    log.info("Copernicus ingestion not implemented yet; using next source")
-    return None
+    kelvin, data_date = got
+    return kelvin - 273.15, data_date
 
 
 def _series(values) -> np.ndarray:
@@ -180,11 +176,16 @@ def fetch_ocean_field(grid: Grid, date: dt.date | None = None) -> OceanField:
     """Best available SST/current field for ``date``. Never raises."""
     date = date or dt.date.today()
     if config.USE_LIVE_OCEAN_DATA:
-        for fetch in (_fetch_copernicus, _fetch_open_meteo):
-            field = fetch(grid, date)
-            if field is not None:
-                log.info("Ocean data source: %s", field.source)
-                return field
+        field = _fetch_open_meteo(grid, date)
+        if field is not None:
+            sst = _fetch_copernicus_sst(grid, date)
+            if sst is not None:
+                # Satellite SST is the better temperature field; Open-Meteo
+                # still supplies currents (Copernicus SST has none).
+                field.sst_c = sst[0]
+                field.source = f"copernicus-sst({sst[1].isoformat()})+open-meteo-currents"
+            log.info("Ocean data source: %s", field.source)
+            return field
     else:
         log.info("USE_LIVE_OCEAN_DATA is off; using synthetic ocean field")
 
