@@ -754,12 +754,11 @@ function dayLabel(day) {
   return new Intl.DateTimeFormat("en-NZ", {timeZone:"Pacific/Auckland", weekday:"short", day:"numeric", month:"short"}).format(date);
 }
 function tideTimes(day) {
-  const shift = day * 42;
-  const clock = (m) => `${String(Math.floor(m / 60) % 24).padStart(2,"0")}:${String(m % 60).padStart(2,"0")}`;
-  return [{type:"High",time:clock(270+shift),height:(2.2-day*.1).toFixed(1)},
-          {type:"Low",time:clock(640+shift),height:(.5+day*.1).toFixed(1)},
-          {type:"High",time:clock(1015+shift),height:(2.1+day*.1).toFixed(1)},
-          {type:"Low",time:clock(1380+shift),height:(.6+day*.1).toFixed(1)}];
+  // Modelled high/low water from today's data file (Open-Meteo sea level).
+  // Empty when the file has none: nothing is invented.
+  const ex = demoTiming && demoTiming.tide_extremes;
+  const list = ex && ex.days && ex.days[day] ? ex.days[day] : [];
+  return list.map((t) => ({type: t.type, time: t.time, height: (t.height_m >= 0 ? "+" : "") + Number(t.height_m).toFixed(1)}));
 }
 // ---- Smoothed water display ---------------------------------------------
 // The 500 m cells stay the data and the tap target, but their colours are
@@ -945,9 +944,9 @@ function renderDayPreview() {
   target.innerHTML = `<b>${dayLabel(activeDay)} · outlook</b>
     <p class="muted">The map, sea state and best marks reflect your chosen day.</p>
     <b>Explore ${Math.min(12,ranked.length)} locations · tap to pin</b>${ranked.slice(0,12).map((p,i)=>`<button class="spot-button" type="button" data-spot="${p.rank}">#${i+1} · ${escapeHtml(spotName(p))} · Score ${Math.round(demoScore(p))}<small>${dd(p.lat,p.lon)} · ${escapeHtml((p.species||[]).join(", "))}</small></button>`).join("")}
-    <div class="future-item"><b>Tides</b><small>High and low times near Tutukaka.</small>
-    ${tideTimes(activeDay).map(t=>`<div class="day-mark">${t.type} ${t.time} · ${t.height} m</div>`).join("")}</div>
-    <p class="muted">Check official tide and marine forecasts before going out.</p>`;
+    <div class="future-item"><b>Tides</b><small>Modelled high and low water near Tutukaka.</small>
+    ${tideTimes(activeDay).map(t=>`<div class="day-mark">${t.type} ${t.time} · ${t.height} m</div>`).join("") || `<div class="day-mark">Tide times unavailable</div>`}</div>
+    <p class="muted">Modelled sea level (Open-Meteo), heights vs mean sea level. Not a tide table: check official LINZ tide tables before going out.</p>`;
 }
 el("target-species").addEventListener("change", e=>{targetSpecies=e.target.value;applyScenario();});
 const EXPLORE_HTML = `<h2>Explore</h2>
@@ -1137,7 +1136,7 @@ el("feature-content").addEventListener("click", (e) => {
   }
   if (action.id === "pack-open") {
     const pack=readDemo(PACK_KEY,null);
-    el("pack-view").innerHTML=pack ? `<p class="muted">Saved ${escapeHtml(pack.date)} · ${pack.marks.length} marks, example tides. Map tiles require signal.</p>`+
+    el("pack-view").innerHTML=pack ? `<p class="muted">Saved ${escapeHtml(pack.date)} · ${pack.marks.length} marks, modelled tides. Map tiles require signal.</p>`+
       pack.marks.slice(0,5).map(p=>`<div class="day-mark">${escapeHtml(spotName(p))} · ${dd(p.lat,p.lon)} · ${Math.round(p.score)}/100</div>`).join("") : "No saved pack yet.";return;
   }
   const button = action;
@@ -1237,8 +1236,10 @@ el("toggle").addEventListener("click", (e) => {
       if (real(src.ocean)) live.push("sea temp &amp; currents (Open-Meteo, coarse)");
       const marineReal = meta.timing && meta.timing.conditions_source && !String(meta.timing.conditions_source).includes("synthetic");
       if (marineReal) live.push("wind &amp; swell");
+      const tx = meta.timing && meta.timing.tide_extremes;
+      if (tx && tx.days && tx.days.length && tx.days[0].length) live.push("modelled tides");
       if (live.length) {
-        el("prototype").innerHTML = `Real: ${live.join(", ")}. Still demo: ${real(src.chlorophyll) ? "" : "chlorophyll, "}fronts, tide times, species, spot names &middot; Not for navigation`;
+        el("prototype").innerHTML = `Real: ${live.join(", ")}. Still demo: ${real(src.chlorophyll) ? "" : "chlorophyll, "}fronts, species, spot names &middot; Not for navigation`;
       }
     }
 
