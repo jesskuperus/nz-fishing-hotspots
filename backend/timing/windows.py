@@ -57,6 +57,7 @@ def build_windows(date: dt.date, lat: float, lon: float) -> dict:
         "date": date.isoformat(),
         "tide": {k: v for k, v in tide.items() if k != "heights_m"},
         "tide_heights_m": tide["heights_m"],
+        "tide_extremes": tide_mod.fetch_tide_extremes(date, lat, lon),
         "moon": moon,
         "sunrise_local": sun["sunrise"].astimezone(NZ).strftime("%H:%M") if sun["sunrise"] else None,
         "sunset_local": sun["sunset"].astimezone(NZ).strftime("%H:%M") if sun["sunset"] else None,
