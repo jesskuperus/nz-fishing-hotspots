@@ -73,7 +73,11 @@ def run_pipeline(
     score = scored["hotspot_score"]
 
     lat_mesh, lon_mesh = grid.mesh
-    water = ~land_mask(lat_mesh, lon_mesh) & np.isfinite(bathy.depth_m)
+    water = np.isfinite(bathy.depth_m)
+    if "synthetic" in bathy.source:
+        # The invented coastline only belongs with the invented seabed. A real
+        # raster already has NaN on land.
+        water &= ~land_mask(lat_mesh, lon_mesh)
     keep = water & (score >= min_score)
 
     # Percentile rank within the day's water cells. The absolute score is the
