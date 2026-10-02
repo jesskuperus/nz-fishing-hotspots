@@ -6,11 +6,9 @@ water masses is a nice line on a map and nothing else, which is why this
 term belongs in the per-cell score rather than in the bite-window timeline.
 
 Order of preference:
-1. Open-Meteo Marine ``chlorophyll`` (free, no key), sampled coarsely and
-   interpolated onto the grid.
-2. Copernicus / NASA OceanColor L3 (needs credentials -- see
-   ``TODO_USER_SETUP.md``).
-3. ``_synthetic_chlorophyll``, which always succeeds.
+1. Copernicus Marine ocean colour (4 km, gap-free daily, needs the free
+   account). Open-Meteo has no chlorophyll variable, so it is not used.
+2. ``_synthetic_chlorophyll``, which always succeeds.
 
 Like every other fetcher here, a network or credential failure is logged
 and downgraded to synthetic; it never raises.
@@ -74,60 +72,19 @@ def _synthetic_chlorophyll(grid: Grid, date: dt.date) -> np.ndarray:
     return np.clip(chl, 0.02, config.CHL_CEILING_MG_M3)
 
 
-def _fetch_live(grid: Grid, date: dt.date) -> np.ndarray | None:
-    """Coarse sample of Open-Meteo's chlorophyll field, or None on failure."""
-    import httpx
-    from scipy.interpolate import RegularGridInterpolator
-
-    n = max(config.LIVE_SAMPLE_POINTS, 2)
-    lats = np.linspace(grid.bbox.lat_min, grid.bbox.lat_max, n)
-    lons = np.linspace(grid.bbox.lon_min, grid.bbox.lon_max, n)
-    values = np.full((n, n), np.nan)
-
-    with httpx.Client(timeout=config.OCEAN_FETCH_TIMEOUT_S) as client:
-        for i, la in enumerate(lats):
-            for j, lo in enumerate(lons):
-                resp = client.get(
-                    config.OPEN_METEO_MARINE_URL,
-                    params={
-                        "latitude": round(float(la), 4),
-                        "longitude": round(float(lo), 4),
-                        "daily": "chlorophyll",
-                        "start_date": date.isoformat(),
-                        "end_date": date.isoformat(),
-                        "timezone": "Pacific/Auckland",
-                    },
-                )
-                resp.raise_for_status()
-                series = resp.json().get("daily", {}).get("chlorophyll") or []
-                if series and series[0] is not None:
-                    values[i, j] = float(series[0])
-
-    if not np.isfinite(values).any():
-        return None
-    # Land-adjacent sample points come back null; fill them from the mean so
-    # the interpolator has a complete corner set.
-    values = np.where(np.isfinite(values), values, np.nanmean(values))
-
-    interp = RegularGridInterpolator(
-        (lats, lons), values, method="linear", bounds_error=False, fill_value=None
-    )
-    lat_mesh, lon_mesh = grid.mesh
-    points = np.stack([lat_mesh.ravel(), lon_mesh.ravel()], axis=-1)
-    return np.clip(interp(points).reshape(grid.shape), 0.0, config.CHL_CEILING_MG_M3)
-
-
 def fetch_chlorophyll(grid: Grid, date: dt.date | None = None) -> ChlorophyllField:
     """Chlorophyll-a for ``date``, live if reachable and synthetic otherwise."""
     date = date or dt.date.today()
     if config.USE_LIVE_CHLOROPHYLL:
-        try:
-            live = _fetch_live(grid, date)
-            if live is not None:
-                return ChlorophyllField(live, "open-meteo-marine-chlorophyll", date)
-            log.warning("Chlorophyll fetch returned no usable values; using synthetic")
-        except Exception as exc:  # noqa: BLE001 - never fail the daily run
-            log.warning("Chlorophyll fetch failed (%s); using synthetic", exc)
+        from backend.data_ingestion import copernicus
+
+        got = copernicus.fetch_on_grid(
+            copernicus.CHL_DATASET_ID, copernicus.CHL_VARIABLE, grid, date, lookback_days=8
+        )
+        if got is not None:
+            chl = np.clip(got[0], 0.0, config.CHL_CEILING_MG_M3)
+            return ChlorophyllField(chl, f"copernicus-chl({got[1].isoformat()})", date)
+        log.info("No Copernicus chlorophyll; using synthetic")
     return ChlorophyllField(
         _synthetic_chlorophyll(grid, date), "synthetic-mock-chlorophyll", date
     )
